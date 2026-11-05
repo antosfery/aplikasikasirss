@@ -22,6 +22,26 @@
   <!-- SheetJS for Excel Import/Export -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   
+  <!-- Firebase Modular Web SDK v11.6.1 (Official CDN) -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getFirestore, doc, getDoc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+    // Bind Firebase SDK functions into window.FB_SDK for application core access
+    window.FB_SDK = {
+      initializeApp,
+      getAuth,
+      signInAnonymously,
+      getFirestore,
+      doc,
+      getDoc,
+      setDoc,
+      serverTimestamp
+    };
+    window.dispatchEvent(new Event('firebase-sdk-ready'));
+  </script>
+
   <!-- Tailwind Config Customizations -->
   <script>
     tailwind.config = {
@@ -135,6 +155,13 @@
       .no-print {
         display: none !important;
       }
+    }
+
+    /* Proteksi Mutlak Sembunyi Menu Khusus Admin untuk Kasir */
+    .role-kasir-active .admin-only {
+      display: none !important;
+      visibility: hidden !important;
+      pointer-events: none !important;
     }
   </style>
 </head>
@@ -1474,29 +1501,49 @@
                 </div>
                 <div>
                   <h3 class="font-bold text-white text-sm sm:text-base">Database Firebase Cloud</h3>
-                  <p class="text-[11px] text-slate-400">Sinkronisasi data cloud real-time antar perangkat</p>
+                  <p class="text-[11px] text-slate-400">Sinkronisasi data cloud real-time via Firebase SDK & Anonymous Auth (singarajasoccerfield-1f2bb)</p>
                 </div>
               </div>
 
               <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                 <div>
                   <label class="text-slate-400 block mb-1">Firebase Project ID</label>
-                  <input type="text" id="fbProjectId" placeholder="singaraja-soccerfield" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-mono">
+                  <input type="text" id="fbProjectId" value="singarajasoccerfield-1f2bb" placeholder="singarajasoccerfield-1f2bb" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-mono">
                 </div>
                 <div>
                   <label class="text-slate-400 block mb-1">API Key</label>
                   <input type="password" id="fbApiKey" placeholder="AIzaSy..." class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-mono">
                 </div>
                 <div class="sm:col-span-2">
-                  <label class="text-slate-400 block mb-1">Database URL (Opsional)</label>
-                  <input type="text" id="fbDbUrl" placeholder="https://singaraja-soccerfield-default-rtdb.firebaseio.com" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-mono">
+                  <label class="text-slate-400 block mb-1">Auth Domain</label>
+                  <input type="text" id="fbAuthDomain" value="singarajasoccerfield-1f2bb.firebaseapp.com" placeholder="singarajasoccerfield-1f2bb.firebaseapp.com" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-mono">
+                  <p class="text-[10px] text-slate-500 mt-1">Menggunakan SDK Resmi Firebase v11 dengan Autentikasi Anonim aktif. Bebas CORS error.</p>
                 </div>
               </div>
 
-              <button type="button" onclick="saveFirebaseConfig()" class="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5">
-                <i data-lucide="check-circle" class="w-4 h-4 text-emerald-400"></i>
-                <span>Simpan Konfigurasi Database</span>
-              </button>
+              <div class="flex flex-col sm:flex-row gap-2 pt-1">
+                <button type="button" onclick="saveFirebaseConfig()" class="w-full sm:w-auto px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-md shadow-emerald-600/20">
+                  <i data-lucide="check-circle" class="w-4 h-4"></i>
+                  <span>Simpan Konfigurasi Database</span>
+                </button>
+                <button type="button" onclick="testFirebaseConnection()" class="w-full sm:w-auto px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold transition-all flex items-center justify-center gap-1.5">
+                  <i data-lucide="radio" class="w-4 h-4 text-amber-400"></i>
+                  <span>Tes Koneksi Firebase SDK</span>
+                </button>
+                <button type="button" onclick="syncAllToFirebaseCloud()" class="w-full sm:w-auto px-4 py-2.5 bg-amber-600 hover:bg-amber-500 text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-md shadow-amber-600/20">
+                  <i data-lucide="cloud-upload" class="w-4 h-4"></i>
+                  <span>Sinkronisasi Data ke Cloud</span>
+                </button>
+              </div>
+
+              <!-- Petunjuk Diagnostik Firebase -->
+              <div id="fbDiagnosticBox" class="p-3.5 bg-slate-950/80 rounded-2xl border border-slate-800/80 text-[11px] text-slate-400 space-y-1.5 hidden">
+                <div class="flex items-center gap-2 font-bold text-slate-200">
+                  <i data-lucide="info" class="w-3.5 h-3.5 text-amber-400"></i>
+                  <span>Hasil Diagnostik Koneksi:</span>
+                </div>
+                <p id="fbDiagnosticText" class="font-mono text-slate-300">Menunggu tes...</p>
+              </div>
             </div>
 
           </div>
@@ -2175,6 +2222,7 @@
     const KEY_USERS = 'ssf_users_v5';
     const KEY_AUTH_SESSION = 'ssf_active_session_v5';
     const KEY_INVOICE_DATA = 'ssf_invoice_draft_v1';
+    const KEY_FIREBASE = 'ssf_firebase_config_v5';
 
     // Safe Storage Helpers
     function getStored(key, fallback) {
@@ -2255,7 +2303,19 @@
 
     const DEFAULT_QRIS = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=SINGARAJA_SOCCERFIELD_QRIS';
 
-    // Global State
+    // Konfigurasi Resmi Firebase Singaraja Soccerfield
+    const OFFICIAL_FIREBASE_CONFIG = {
+      apiKey: "AIzaSyAe3JbyvIMTYQRNQQuHPNHPzSqo2n_jdrM",
+      authDomain: "singarajasoccerfield-1f2bb.firebaseapp.com",
+      projectId: "singarajasoccerfield-1f2bb",
+      storageBucket: "singarajasoccerfield-1f2bb.firebasestorage.app",
+      messagingSenderId: "427819640481",
+      appId: "1:427819640481:web:912a1750468b46b136f2e0",
+      measurementId: "G-HHWDYK6GS8",
+      dbUrl: "https://singarajasoccerfield-1f2bb-default-rtdb.firebaseio.com"
+    };
+
+    // Global State & Chart Instances
     let currentUser = null;
     let users = getStored(KEY_USERS, defaultUsers);
     let products = getStored(KEY_PRODUCTS, defaultProducts);
@@ -2268,16 +2328,23 @@
     let closings = getStored(KEY_CLOSINGS, []);
     let rentalRates = getStored(KEY_RATES, defaultRates);
     let customQrisUrl = getStored(KEY_QRIS, DEFAULT_QRIS);
+    let firebaseConfig = getStored(KEY_FIREBASE, OFFICIAL_FIREBASE_CONFIG);
 
-    // POS Cart State
+    // POS & UI Interactive States
     let cart = [];
     let currentPosCategory = 'ALL';
     let currentExpenseFilter = 'ALL';
     let activePaymentMethod = 'CASH';
-    let tempProductImage = '';
     let lastCompletedTransaction = null;
+    let tempProductImage = '';
 
-    // Chart Instances
+    // Firebase App & Services Instances
+    let fbApp = null;
+    let fbAuth = null;
+    let fbDb = null;
+    let fbUser = null;
+
+    // Chart.js Instances
     let trendChart = null;
     let methodChart = null;
 
@@ -2384,6 +2451,7 @@
       currentUser = null;
       // Hapus Sesi Login saat logout manual
       localStorage.removeItem(KEY_AUTH_SESSION);
+      document.body.classList.remove('role-kasir-active');
       document.getElementById('loginOverlay').classList.remove('hidden');
       showToast('Anda telah keluar dari sistem.', 'info');
     }
@@ -2392,6 +2460,13 @@
       if (!currentUser) return;
       const isKasir = currentUser.role === 'Kasir';
       
+      // Pasang class global di body untuk kontrol CSS mutlak
+      if (isKasir) {
+        document.body.classList.add('role-kasir-active');
+      } else {
+        document.body.classList.remove('role-kasir-active');
+      }
+
       // Update Navbar Badges
       const roleBadge = document.getElementById('roleBadge');
       const navUserName = document.getElementById('navUserName');
@@ -2403,14 +2478,14 @@
       }
       if (navUserName) navUserName.innerText = currentUser.name;
 
-      // Menu yang tidak bisa diakses USER kasir (Inventori, Tarif, Integrasi, Kelola User, Master Karyawan)
-      // dipastikan tidak muncul sama sekali pada navigasi desktop maupun mobile
-      document.querySelectorAll('.admin-only').forEach(el => {
+      // Menu yang dibatasi untuk Kasir: Inventori, Tarif Sewa, Integrasi & QRIS, Kelola User, dan Kelola Karyawan
+      const adminOnlyElements = document.querySelectorAll('.admin-only');
+      adminOnlyElements.forEach(el => {
         if (isKasir) {
-          el.style.display = 'none';
+          el.style.setProperty('display', 'none', 'important');
           el.classList.add('hidden');
         } else {
-          el.style.display = '';
+          el.style.removeProperty('display');
           el.classList.remove('hidden');
         }
       });
@@ -3614,7 +3689,13 @@ Matur Suksma!`;
 
         if (!trendCanvas || !methodCanvas) return;
 
-        // Prepare 7-day data
+        // Pastikan pustaka Chart.js tersedia
+        if (typeof Chart === 'undefined') {
+          console.warn('Chart.js library is not loaded');
+          return;
+        }
+
+        // Siapkan data 7 hari terakhir secara akurat
         const labels = [];
         const dataValues = [];
         for (let i = 6; i >= 0; i--) {
@@ -3623,60 +3704,124 @@ Matur Suksma!`;
           const dStr = d.toISOString().slice(0, 10);
           labels.push(d.toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric' }));
 
-          const sum = transactions
+          const sumTrx = transactions
             .filter(t => (t.date || '').slice(0, 10) === dStr)
             .reduce((acc, t) => acc + Number(t.total || 0), 0);
-          dataValues.push(sum);
+
+          const sumBkg = bookings
+            .filter(b => (b.date || '').slice(0, 10) === dStr)
+            .reduce((acc, b) => acc + Number(b.downPayment || 0), 0);
+
+          dataValues.push(sumTrx + sumBkg);
         }
 
-        if (trendChart) trendChart.destroy();
-        trendChart = new Chart(trendCanvas, {
+        // 1. Line Chart: Tren Penjualan 7 Hari
+        if (trendChart) {
+          trendChart.destroy();
+          trendChart = null;
+        }
+
+        const trendCtx = trendCanvas.getContext('2d');
+        trendChart = new Chart(trendCtx, {
           type: 'line',
           data: {
             labels: labels,
             datasets: [{
-              label: 'Penjualan (Rp)',
+              label: 'Omset (Rp)',
               data: dataValues,
               borderColor: '#10b981',
-              backgroundColor: 'rgba(16, 185, 129, 0.1)',
-              tension: 0.3,
+              backgroundColor: 'rgba(16, 185, 129, 0.15)',
+              tension: 0.35,
               fill: true,
-              borderWidth: 2
+              borderWidth: 2.5,
+              pointBackgroundColor: '#10b981',
+              pointRadius: 4,
+              pointHoverRadius: 6
             }]
           },
           options: {
             responsive: true,
             maintainAspectRatio: false,
-            plugins: { legend: { display: false } },
+            plugins: { 
+              legend: { display: false },
+              tooltip: {
+                callbacks: {
+                  label: function(context) {
+                    return ' ' + formatRupiah(context.parsed.y);
+                  }
+                }
+              }
+            },
             scales: {
-              y: { grid: { color: '#1e293b' }, ticks: { color: '#94a3b8' } },
-              x: { grid: { display: false }, ticks: { color: '#94a3b8' } }
+              y: { 
+                grid: { color: 'rgba(30, 41, 59, 0.6)' }, 
+                ticks: { 
+                  color: '#94a3b8',
+                  font: { family: 'JetBrains Mono', size: 10 },
+                  callback: function(value) {
+                    if (value >= 1000000) return (value / 1000000).toFixed(1) + 'M';
+                    if (value >= 1000) return (value / 1000) + 'k';
+                    return value;
+                  }
+                } 
+              },
+              x: { 
+                grid: { display: false }, 
+                ticks: { color: '#94a3b8', font: { size: 10 } } 
+              }
             }
           }
         });
 
-        // Payment Proportion Chart
-        let cashCount = 0, qrisCount = 0;
+        // 2. Doughnut Chart: Proporsi Pembayaran
+        let cashCount = 0;
+        let qrisCount = 0;
         transactions.forEach(t => {
           if (t.method === 'CASH') cashCount += Number(t.total || 0);
           if (t.method === 'QRIS') qrisCount += Number(t.total || 0);
         });
 
-        if (methodChart) methodChart.destroy();
-        methodChart = new Chart(methodCanvas, {
+        if (methodChart) {
+          methodChart.destroy();
+          methodChart = null;
+        }
+
+        const methodCtx = methodCanvas.getContext('2d');
+        const hasData = (cashCount > 0 || qrisCount > 0);
+
+        methodChart = new Chart(methodCtx, {
           type: 'doughnut',
           data: {
-            labels: ['Cash', 'QRIS'],
+            labels: hasData ? ['Cash (Tunai)', 'QRIS (Non-Tunai)'] : ['Belum Ada Transaksi'],
             datasets: [{
-              data: [cashCount || 1, qrisCount || 0],
-              backgroundColor: ['#10b981', '#14b8a6'],
-              borderWidth: 0
+              data: hasData ? [cashCount, qrisCount] : [1],
+              backgroundColor: hasData ? ['#10b981', '#14b8a6'] : ['#334155'],
+              borderWidth: 2,
+              borderColor: '#0f172a'
             }]
           },
           options: {
             responsive: true,
             maintainAspectRatio: false,
-            plugins: { legend: { position: 'bottom', labels: { color: '#94a3b8' } } }
+            cutout: '68%',
+            plugins: { 
+              legend: { 
+                position: 'bottom', 
+                labels: { 
+                  color: '#94a3b8',
+                  boxWidth: 12,
+                  font: { size: 11, family: 'Inter' }
+                } 
+              },
+              tooltip: {
+                callbacks: {
+                  label: function(context) {
+                    if (!hasData) return ' Belum ada data';
+                    return ' ' + context.label + ': ' + formatRupiah(context.raw);
+                  }
+                }
+              }
+            }
           }
         });
       } catch (e) {
@@ -4427,6 +4572,179 @@ Matur Suksma!`;
 
       const webhookInput = document.getElementById('sheetWebhookUrl');
       if (webhookInput) webhookInput.value = getStored(KEY_WEBHOOK, '');
+
+      // Load data Firebase tersimpan
+      const fbConfig = getStored(KEY_FIREBASE, OFFICIAL_FIREBASE_CONFIG);
+      const fbProjEl = document.getElementById('fbProjectId');
+      const fbKeyEl = document.getElementById('fbApiKey');
+      const fbAuthDomEl = document.getElementById('fbAuthDomain');
+
+      if (fbProjEl) fbProjEl.value = fbConfig.projectId || OFFICIAL_FIREBASE_CONFIG.projectId;
+      if (fbKeyEl) fbKeyEl.value = fbConfig.apiKey || OFFICIAL_FIREBASE_CONFIG.apiKey;
+      if (fbAuthDomEl) fbAuthDomEl.value = fbConfig.authDomain || OFFICIAL_FIREBASE_CONFIG.authDomain;
+    }
+
+    function initFirebaseClient() {
+      if (!window.FB_SDK) return null;
+      try {
+        const fbConfig = getStored(KEY_FIREBASE, OFFICIAL_FIREBASE_CONFIG);
+        const configToUse = {
+          apiKey: fbConfig.apiKey || OFFICIAL_FIREBASE_CONFIG.apiKey,
+          authDomain: fbConfig.authDomain || OFFICIAL_FIREBASE_CONFIG.authDomain,
+          projectId: fbConfig.projectId || OFFICIAL_FIREBASE_CONFIG.projectId,
+          storageBucket: fbConfig.storageBucket || OFFICIAL_FIREBASE_CONFIG.storageBucket,
+          messagingSenderId: fbConfig.messagingSenderId || OFFICIAL_FIREBASE_CONFIG.messagingSenderId,
+          appId: fbConfig.appId || OFFICIAL_FIREBASE_CONFIG.appId
+        };
+
+        if (!fbApp) {
+          fbApp = window.FB_SDK.initializeApp(configToUse);
+          fbAuth = window.FB_SDK.getAuth(fbApp);
+          fbDb = window.FB_SDK.getFirestore(fbApp);
+        }
+        return { fbApp, fbAuth, fbDb };
+      } catch (e) {
+        console.warn('Firebase init error:', e);
+        return null;
+      }
+    }
+
+    function saveFirebaseConfig() {
+      const projectId = document.getElementById('fbProjectId')?.value.trim() || OFFICIAL_FIREBASE_CONFIG.projectId;
+      const apiKey = document.getElementById('fbApiKey')?.value.trim() || OFFICIAL_FIREBASE_CONFIG.apiKey;
+      const authDomain = document.getElementById('fbAuthDomain')?.value.trim() || `${projectId}.firebaseapp.com`;
+
+      const config = {
+        ...OFFICIAL_FIREBASE_CONFIG,
+        projectId: projectId,
+        apiKey: apiKey,
+        authDomain: authDomain,
+        updatedAt: new Date().toISOString()
+      };
+
+      setStored(KEY_FIREBASE, config);
+      firebaseConfig = config;
+
+      // Reset instance agar membaca config baru
+      fbApp = null;
+      fbAuth = null;
+      fbDb = null;
+      fbUser = null;
+
+      showToast('Konfigurasi Firebase berhasil disimpan!', 'success');
+    }
+
+    async function testFirebaseConnection() {
+      const diagBox = document.getElementById('fbDiagnosticBox');
+      const diagText = document.getElementById('fbDiagnosticText');
+      if (diagBox) diagBox.classList.remove('hidden');
+
+      if (!window.FB_SDK) {
+        if (diagText) diagText.innerHTML = '<span class="text-rose-400 font-bold">❌ SDK Firebase sedang memuat...</span> Silakan tunggu 2 detik lalu klik lagi.';
+        showToast('Firebase SDK sedang memuat, silakan coba lagi sejenak.', 'info');
+        return;
+      }
+
+      const client = initFirebaseClient();
+      if (!client) {
+        if (diagText) diagText.innerHTML = '<span class="text-rose-400 font-bold">❌ Gagal inisialisasi Firebase Client.</span> Periksa API Key dan Project ID.';
+        showToast('Gagal inisialisasi Firebase!', 'error');
+        return;
+      }
+
+      if (diagText) diagText.innerHTML = '<span class="text-amber-400 font-bold">⏳ Melakukan Anonymous Authentication ke Firebase...</span>';
+      showToast('Menghubungkan ke Firebase via Anonymous Auth...', 'info');
+
+      try {
+        // 1. Lakukan Login Anonim Resmi SDK (Bebas CORS!)
+        const authCredential = await window.FB_SDK.signInAnonymously(client.fbAuth);
+        fbUser = authCredential.user;
+        const uid = fbUser.uid;
+
+        if (diagText) {
+          diagText.innerHTML = `<span class="text-teal-400 font-bold">✅ Berhasil Login Anonim! (UID: ${uid})</span><br>Sedang menguji pembacaan/penulisan ke Cloud Firestore...`;
+        }
+
+        // 2. Tulis Dokumen Test Ping ke Firestore
+        const pingRef = window.FB_SDK.doc(client.fbDb, 'system_health', 'connection_test');
+        await window.FB_SDK.setDoc(pingRef, {
+          status: 'ONLINE',
+          lastPing: new Date().toISOString(),
+          testedByUid: uid,
+          device: navigator.userAgent
+        }, { merge: true });
+
+        // 3. Baca kembali untuk memastikan read & write rules lolos
+        const snapshot = await window.FB_SDK.getDoc(pingRef);
+
+        if (snapshot.exists()) {
+          const res = snapshot.data();
+          if (diagText) {
+            diagText.innerHTML = `
+              <span class="text-emerald-400 font-bold text-sm">✅ KONEKSI CLOUD BERHASIL & AKTIF 100%!</span><br>
+              <div class="mt-1 space-y-0.5 text-[11px] text-slate-300">
+                <p>&bull; <b>Proyek:</b> ${firebaseConfig.projectId}</p>
+                <p>&bull; <b>Mode:</b> Anonymous Sign-in (UID: <code class="text-amber-300 font-mono">${uid}</code>)</p>
+                <p>&bull; <b>Firestore Database:</b> Terhubung & Berhasil Write-Read</p>
+                <p>&bull; <b>Waktu Sinkron:</b> ${res.lastPing}</p>
+              </div>
+            `;
+          }
+          showToast('✅ Berhasil! Firebase Firestore terhubung & aktif tanpa error!', 'success');
+        }
+      } catch (err) {
+        console.error('Firebase test error:', err);
+        let errorHint = err.message;
+        if (err.code === 'permission-denied') {
+          errorHint = 'Aturan Security Rules Firestore menolak akses. Buka Firebase Console > Firestore Database > Rules dan set "allow read, write: if true;" untuk sementara.';
+        } else if (err.code === 'auth/operation-not-allowed') {
+          errorHint = 'Anonymous provider belum diaktifkan. Buka Firebase Console > Authentication > Sign-in method > Anonymous dan klik Enable.';
+        }
+
+        if (diagText) {
+          diagText.innerHTML = `
+            <span class="text-rose-400 font-bold">❌ KONEKSI DITOLAK OLEH FIREBASE (${err.code || 'ERROR'}):</span><br>
+            <p class="mt-1 text-slate-300">${errorHint}</p>
+          `;
+        }
+        showToast('Koneksi gagal: ' + (err.code || err.message), 'error');
+      }
+    }
+
+    async function syncAllToFirebaseCloud() {
+      if (!window.FB_SDK) {
+        showToast('Firebase SDK belum siap.', 'error');
+        return;
+      }
+      const client = initFirebaseClient();
+      if (!client) {
+        showToast('Gagal inisialisasi Firebase.', 'error');
+        return;
+      }
+
+      showToast('Memulai sinkronisasi data ke Firebase Cloud...', 'info');
+      try {
+        if (!client.fbAuth.currentUser) {
+          await window.FB_SDK.signInAnonymously(client.fbAuth);
+        }
+
+        const syncRef = window.FB_SDK.doc(client.fbDb, 'cloud_sync', 'singaraja_soccerfield_data');
+        await window.FB_SDK.setDoc(syncRef, {
+          lastSyncAt: new Date().toISOString(),
+          products: products,
+          transactions: transactions,
+          bookings: bookings,
+          bons: bons,
+          expenses: expenses,
+          attendance: attendance,
+          users: users
+        });
+
+        showToast('✅ Seluruh data berhasil dicadangkan ke Firebase Cloud!', 'success');
+      } catch (e) {
+        console.error('Cloud backup error:', e);
+        showToast('Gagal sinkronisasi data: ' + e.message, 'error');
+      }
     }
 
     function handleUploadQrisImage(e) {
