@@ -3237,7 +3237,7 @@ Matur Suksma!`;
       try { lucide.createIcons(); } catch (e) {}
     }
 
-    // Audio Context Helper untuk Efek Suara Kasir ("Tot Tot")
+// Audio Context Helper untuk Efek Suara Kasir ("Tot Tot") & Voice "Pembelian Berhasil"
     let audioCtx = null;
     function playCartBeep() {
       try {
@@ -3275,6 +3275,62 @@ Matur Suksma!`;
         osc2.stop(now + 0.16);
       } catch (e) {
         console.warn('AudioContext playback error:', e);
+      }
+    }
+
+    // Suara Notifikasi Pembayaran Berhasil (Chime + Suara Bicara "Pembelian Berhasil")
+    function playPaymentSuccessVoice() {
+      try {
+        // 1. Bunyikan nada jingle sukses (C5 -> E5 -> G5)
+        if (!audioCtx) {
+          audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        if (audioCtx.state === 'suspended') {
+          audioCtx.resume();
+        }
+
+        const now = audioCtx.currentTime;
+        const notes = [523.25, 659.25, 783.99]; // Nada C5, E5, G5
+        notes.forEach((freq, idx) => {
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(freq, now + (idx * 0.08));
+          gain.gain.setValueAtTime(0.18, now + (idx * 0.08));
+          gain.gain.exponentialRampToValueAtTime(0.001, now + (idx * 0.08) + 0.25);
+          osc.connect(gain);
+          gain.connect(audioCtx.destination);
+          osc.start(now + (idx * 0.08));
+          osc.stop(now + (idx * 0.08) + 0.25);
+        });
+      } catch (e) {
+        console.warn('Jingle playback error:', e);
+      }
+
+      // 2. Mainkan suara ucapan bahasa Indonesia "Pembelian berhasil"
+      try {
+        if ('speechSynthesis' in window) {
+          window.speechSynthesis.cancel(); // Hentikan antrean suara sebelumnya
+          const utterance = new SpeechSynthesisUtterance("Pembelian berhasil");
+          utterance.lang = 'id-ID';
+          utterance.rate = 1.0;
+          utterance.pitch = 1.05;
+          utterance.volume = 1.0;
+
+          // Pilih suara bahasa Indonesia jika tersedia di sistem
+          const voices = window.speechSynthesis.getVoices();
+          const idVoice = voices.find(v => v.lang === 'id-ID' || v.lang === 'id' || v.lang.startsWith('id'));
+          if (idVoice) {
+            utterance.voice = idVoice;
+          }
+
+          // Sedikit jeda 120ms agar selaras setelah jingle pertama
+          setTimeout(() => {
+            window.speechSynthesis.speak(utterance);
+          }, 120);
+        }
+      } catch (e) {
+        console.warn('SpeechSynthesis error:', e);
       }
     }
 
@@ -3506,11 +3562,12 @@ Matur Suksma!`;
       clearCart();
       renderPosCatalog();
 
-      // Show Confirmation Dialog
+      // Show Confirmation Dialog & Mainkan Suara "Pembelian Berhasil"
       document.getElementById('succReceiptNo').innerText = trx.receiptNo;
       document.getElementById('succTotalAmount').innerText = formatRupiah(trx.total);
       document.getElementById('succPaymentMethod').innerText = trx.method;
       openModal('paymentSuccessModal');
+      playPaymentSuccessVoice();
 
       // Trigger Webhook sync
       syncSaleToWebhook(trx);
@@ -5602,6 +5659,14 @@ Salam Olahraga & Fairplay!`;
     document.addEventListener('DOMContentLoaded', () => {
       startLiveClock();
       updateBonBadge();
+
+      // Inisialisasi daftar suara SpeechSynthesis
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.getVoices();
+        window.speechSynthesis.onvoiceschanged = () => {
+          window.speechSynthesis.getVoices();
+        };
+      }
 
       // Listener kesiapan Firebase SDK untuk inisialisasi otomatis
       if (window.FB_SDK) {
