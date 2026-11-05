@@ -2416,6 +2416,29 @@
       return 'Rp ' + Number(num || 0).toLocaleString('id-ID');
     }
 
+    // Helper fungsi tanggal lokal perangkat (WITA/WIB/WIT YYYY-MM-DD) bebas bug selisih zona waktu UTC
+    function getLocalDateString(val = new Date()) {
+      if (!val) return '';
+      if (typeof val === 'string') {
+        if (/^\d{4}-\d{2}-\d{2}$/.test(val.trim())) {
+          return val.trim();
+        }
+        const d = new Date(val);
+        if (isNaN(d.getTime())) return val.slice(0, 10);
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
+      } else if (val instanceof Date) {
+        if (isNaN(val.getTime())) return '';
+        const y = val.getFullYear();
+        const m = String(val.getMonth() + 1).padStart(2, '0');
+        const day = String(val.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
+      }
+      return '';
+    }
+
     // Modal Helpers
     function openModal(id) {
       const el = document.getElementById(id);
@@ -2955,12 +2978,12 @@ Matur Suksma!`;
         }
       }
 
-      // Default filter tanggal mulai & akhir ke hari ini jika masih kosong
+      // Pastikan tanggal mulai & akhir langsung otomatis terisi tanggal lokal hari ini saat dibuka
       const startInput = document.getElementById('reportFilterStartDate');
       const endInput = document.getElementById('reportFilterEndDate');
-      const todayStr = new Date().toISOString().slice(0, 10);
-      if (startInput && !startInput.value) startInput.value = todayStr;
-      if (endInput && !endInput.value) endInput.value = todayStr;
+      const todayStr = getLocalDateString(new Date());
+      if (startInput) startInput.value = todayStr;
+      if (endInput) endInput.value = todayStr;
 
       renderFilteredSalesReport();
     }
@@ -2971,7 +2994,7 @@ Matur Suksma!`;
       if (!startInput || !endInput) return;
 
       const now = new Date();
-      const todayStr = now.toISOString().slice(0, 10);
+      const todayStr = getLocalDateString(now);
 
       if (type === 'TODAY') {
         startInput.value = todayStr;
@@ -2979,17 +3002,17 @@ Matur Suksma!`;
       } else if (type === 'YESTERDAY') {
         const yest = new Date(now);
         yest.setDate(yest.getDate() - 1);
-        const yestStr = yest.toISOString().slice(0, 10);
+        const yestStr = getLocalDateString(yest);
         startInput.value = yestStr;
         endInput.value = yestStr;
       } else if (type === 'LAST7') {
         const past7 = new Date(now);
         past7.setDate(past7.getDate() - 6);
-        startInput.value = past7.toISOString().slice(0, 10);
+        startInput.value = getLocalDateString(past7);
         endInput.value = todayStr;
       } else if (type === 'THISMONTH') {
-        const firstDay = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
-        startInput.value = firstDay;
+        const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+        startInput.value = getLocalDateString(firstDay);
         endInput.value = todayStr;
       } else if (type === 'ALL') {
         startInput.value = '';
@@ -3014,7 +3037,8 @@ Matur Suksma!`;
       }
 
       return transactions.filter(t => {
-        const trxDateOnly = (t.date || '').slice(0, 10);
+        // Ambil tanggal lokal transaksi secara akurat
+        const trxDateOnly = getLocalDateString(t.date);
 
         // Filter Tanggal Mulai
         if (startDate && trxDateOnly < startDate) return false;
@@ -3875,13 +3899,13 @@ Matur Suksma!`;
     // DASHBOARD RENDERING
     // ==========================================
     function renderDashboard() {
-      const todayStr = new Date().toISOString().slice(0, 10);
+      const todayStr = getLocalDateString(new Date()); // Menggunakan tanggal kalender lokal hari ini
       const isKasir = currentUser && currentUser.role === 'Kasir';
 
       if (isKasir) {
-        // Render Kasir KPI
+        // Render Kasir KPI shift lokal hari ini
         const myTodayTrx = transactions.filter(t => 
-          (t.date || '').slice(0, 10) === todayStr &&
+          getLocalDateString(t.date) === todayStr &&
           (!currentUser || t.cashier === currentUser.name)
         );
 
@@ -3894,7 +3918,7 @@ Matur Suksma!`;
         });
 
         const myTodayExpenses = expenses
-          .filter(e => (e.date || '').slice(0, 10) === todayStr && e.category === 'KASIR')
+          .filter(e => getLocalDateString(e.date) === todayStr && e.category === 'KASIR')
           .reduce((sum, e) => sum + Number(e.amount || 0), 0);
 
         document.getElementById('kpiKasirTodaySales').innerText = formatRupiah(totalSales);
@@ -3920,23 +3944,23 @@ Matur Suksma!`;
           }
         }
       } else {
-        // Admin KPI
-        const todayTrx = transactions.filter(t => (t.date || '').slice(0, 10) === todayStr);
-        const todayBookings = bookings.filter(b => (b.date || '').slice(0, 10) === todayStr);
+        // Admin KPI: Transaksi POS hari ini + DP Booking lapangan hari ini
+        const todayTrx = transactions.filter(t => getLocalDateString(t.date) === todayStr);
+        const todayBookings = bookings.filter(b => getLocalDateString(b.date) === todayStr);
 
         let todaySales = todayTrx.reduce((sum, t) => sum + Number(t.total || 0), 0);
         todayBookings.forEach(b => { todaySales += Number(b.downPayment || 0); });
 
         const past7Days = new Date();
         past7Days.setDate(past7Days.getDate() - 7);
-        const past7Str = past7Days.toISOString().slice(0, 10);
+        const past7Str = getLocalDateString(past7Days);
 
         const weekSales = transactions
-          .filter(t => (t.date || '').slice(0, 10) >= past7Str)
+          .filter(t => getLocalDateString(t.date) >= past7Str)
           .reduce((sum, t) => sum + Number(t.total || 0), 0);
 
         const todayExpenses = expenses
-          .filter(e => (e.date || '').slice(0, 10) === todayStr)
+          .filter(e => getLocalDateString(e.date) === todayStr)
           .reduce((sum, e) => sum + Number(e.amount || 0), 0);
 
         const unpaidBonTotal = bons
@@ -3968,21 +3992,21 @@ Matur Suksma!`;
           return;
         }
 
-        // Siapkan data 7 hari terakhir secara akurat
+        // Siapkan data 7 hari terakhir secara akurat dengan tanggal lokal
         const labels = [];
         const dataValues = [];
         for (let i = 6; i >= 0; i--) {
           const d = new Date();
           d.setDate(d.getDate() - i);
-          const dStr = d.toISOString().slice(0, 10);
+          const dStr = getLocalDateString(d);
           labels.push(d.toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric' }));
 
           const sumTrx = (transactions || [])
-            .filter(t => (t.date || '').slice(0, 10) === dStr)
+            .filter(t => getLocalDateString(t.date) === dStr)
             .reduce((acc, t) => acc + Number(t.total || 0), 0);
 
           const sumBkg = (bookings || [])
-            .filter(b => (b.date || '').slice(0, 10) === dStr)
+            .filter(b => getLocalDateString(b.date) === dStr)
             .reduce((acc, b) => acc + Number(b.downPayment || 0), 0);
 
           dataValues.push(sumTrx + sumBkg);
@@ -4596,8 +4620,8 @@ Matur Suksma!`;
     // CLOSING CASHIER OPERATIONS
     // ==========================================
     function renderClosingDashboard() {
-      const todayStr = new Date().toISOString().slice(0, 10);
-      const todayTrx = transactions.filter(t => (t.date || '').slice(0, 10) === todayStr);
+      const todayStr = getLocalDateString(new Date());
+      const todayTrx = transactions.filter(t => getLocalDateString(t.date) === todayStr);
 
       let sysCash = 0, sysQris = 0;
       todayTrx.forEach(t => {
@@ -4606,7 +4630,7 @@ Matur Suksma!`;
       });
 
       const todayExpKasir = expenses
-        .filter(e => (e.date || '').slice(0, 10) === todayStr && e.category === 'KASIR')
+        .filter(e => getLocalDateString(e.date) === todayStr && e.category === 'KASIR')
         .reduce((sum, e) => sum + Number(e.amount || 0), 0);
 
       document.getElementById('closeSysCash').innerText = formatRupiah(sysCash);
@@ -4621,13 +4645,13 @@ Matur Suksma!`;
       const starting = Number(document.getElementById('closingStartingCash')?.value || 0);
       const actual = Number(document.getElementById('closingActualCash')?.value || 0);
 
-      const todayStr = new Date().toISOString().slice(0, 10);
+      const todayStr = getLocalDateString(new Date());
       const sysCash = transactions
-        .filter(t => (t.date || '').slice(0, 10) === todayStr && t.method === 'CASH')
+        .filter(t => getLocalDateString(t.date) === todayStr && t.method === 'CASH')
         .reduce((sum, t) => sum + Number(t.total || 0), 0);
 
       const todayExpKasir = expenses
-        .filter(e => (e.date || '').slice(0, 10) === todayStr && e.category === 'KASIR')
+        .filter(e => getLocalDateString(e.date) === todayStr && e.category === 'KASIR')
         .reduce((sum, e) => sum + Number(e.amount || 0), 0);
 
       const expected = starting + sysCash - todayExpKasir;
@@ -4658,9 +4682,9 @@ Matur Suksma!`;
       const actual = Number(document.getElementById('closingActualCash')?.value || 0);
       const notes = document.getElementById('closingNotes')?.value.trim() || '-';
 
-      const todayStr = new Date().toISOString().slice(0, 10);
+      const todayStr = getLocalDateString(new Date());
       const sysCash = transactions
-        .filter(t => (t.date || '').slice(0, 10) === todayStr && t.method === 'CASH')
+        .filter(t => getLocalDateString(t.date) === todayStr && t.method === 'CASH')
         .reduce((sum, t) => sum + Number(t.total || 0), 0);
 
       const todayExpKasir = expenses
@@ -5599,8 +5623,8 @@ function setupSheets(ss) {
     // WHATSAPP RECAP OPERATIONS
     // ==========================================
     function openWhatsappRecapModal() {
-      const todayStr = new Date().toISOString().slice(0, 10);
-      const todayTrx = transactions.filter(t => (t.date || '').slice(0, 10) === todayStr);
+      const todayStr = getLocalDateString(new Date());
+      const todayTrx = transactions.filter(t => getLocalDateString(t.date) === todayStr);
 
       let totalSales = 0, cashTotal = 0, qrisTotal = 0;
       todayTrx.forEach(t => {
