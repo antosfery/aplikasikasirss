@@ -1780,15 +1780,22 @@
       <div class="space-y-3 text-xs">
         <!-- Photo Upload Preview -->
         <div class="flex items-center gap-4">
-          <div class="w-20 h-20 rounded-2xl bg-slate-950 border border-slate-800 flex items-center justify-center overflow-hidden flex-shrink-0">
+          <div class="w-20 h-20 rounded-2xl bg-slate-950 border border-slate-800 flex items-center justify-center overflow-hidden flex-shrink-0 relative">
             <img id="productPreviewImg" src="https://placehold.co/150x150/1e293b/94a3b8?text=Foto" alt="Foto" class="w-full h-full object-cover">
+            <div id="productImgUploadSpinner" class="hidden absolute inset-0 bg-slate-950/80 backdrop-blur-sm flex flex-col items-center justify-center text-emerald-400">
+              <svg class="animate-spin h-6 w-6 text-emerald-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+              </svg>
+              <span class="text-[9px] font-bold text-white mt-1">Upload...</span>
+            </div>
           </div>
           <div>
-            <label class="inline-flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-semibold cursor-pointer">
+            <label id="lblProductImageInput" class="inline-flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-semibold cursor-pointer transition-all">
               <i data-lucide="camera" class="w-4 h-4 text-emerald-400"></i> Pilih Foto Barang
               <input type="file" id="productImageInput" accept="image/*" onchange="handleProductImageUpload(event)" class="hidden">
             </label>
-            <p class="text-[10px] text-slate-500 mt-1">Format JPG, PNG atau WebP</p>
+            <p id="productUploadStatus" class="text-[10px] text-slate-500 mt-1">Format JPG, PNG atau WebP</p>
           </div>
         </div>
 
@@ -1830,8 +1837,8 @@
 
       <input type="hidden" id="prodEditId" value="">
 
-      <button onclick="saveProductData()" class="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-emerald-600/20">
-        Simpan Barang
+      <button type="button" id="btnSaveProduct" onclick="saveProductData()" class="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-emerald-600/20 flex items-center justify-center gap-2">
+        <span id="btnSaveProductText">Simpan Barang</span>
       </button>
     </div>
   </div>
@@ -4543,6 +4550,50 @@ Matur Suksma!`;
       try { lucide.createIcons(); } catch (e) {}
     }
 
+    let isProductImageUploading = false;
+
+    function setProductSaveButtonLoading(loading, statusText) {
+      isProductImageUploading = loading;
+      const btn = document.getElementById('btnSaveProduct');
+      const btnText = document.getElementById('btnSaveProductText');
+      const spinner = document.getElementById('productImgUploadSpinner');
+      const uploadStatus = document.getElementById('productUploadStatus');
+      const fileInput = document.getElementById('productImageInput');
+      const lblInput = document.getElementById('lblProductImageInput');
+
+      if (loading) {
+        if (btn) {
+          btn.disabled = true;
+          btn.classList.remove('bg-emerald-600', 'hover:bg-emerald-500', 'shadow-emerald-600/20');
+          btn.classList.add('bg-slate-700', 'text-slate-400', 'cursor-not-allowed', 'opacity-70');
+        }
+        if (btnText) {
+          btnText.innerHTML = '<span class="inline-flex items-center gap-2"><svg class="animate-spin h-3.5 w-3.5 text-amber-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path></svg> Menunggu Upload Google Drive...</span>';
+        }
+        if (spinner) spinner.classList.remove('hidden');
+        if (uploadStatus) {
+          uploadStatus.innerHTML = '<span class="text-amber-400 font-semibold animate-pulse">⏳ Sedang mengunggah ke Google Drive...</span>';
+        }
+        if (fileInput) fileInput.disabled = true;
+        if (lblInput) lblInput.classList.add('opacity-50', 'pointer-events-none');
+      } else {
+        if (btn) {
+          btn.disabled = false;
+          btn.classList.remove('bg-slate-700', 'text-slate-400', 'cursor-not-allowed', 'opacity-70');
+          btn.classList.add('bg-emerald-600', 'hover:bg-emerald-500', 'shadow-emerald-600/20');
+        }
+        if (btnText) {
+          btnText.innerText = 'Simpan Barang';
+        }
+        if (spinner) spinner.classList.add('hidden');
+        if (uploadStatus) {
+          uploadStatus.innerHTML = statusText || '<span class="text-slate-500">Format JPG, PNG atau WebP</span>';
+        }
+        if (fileInput) fileInput.disabled = false;
+        if (lblInput) lblInput.classList.remove('opacity-50', 'pointer-events-none');
+      }
+    }
+
     function openProductModal() {
       document.getElementById('productModalTitle').innerText = 'Tambah Barang Baru';
       document.getElementById('prodEditId').value = '';
@@ -4554,6 +4605,7 @@ Matur Suksma!`;
       document.getElementById('prodStock').value = '';
       tempProductImage = '';
       document.getElementById('productPreviewImg').src = 'https://placehold.co/150x150/1e293b/94a3b8?text=Foto';
+      setProductSaveButtonLoading(false, '<span class="text-slate-500">Format JPG, PNG atau WebP</span>');
       openModal('productModal');
     }
 
@@ -4571,6 +4623,9 @@ Matur Suksma!`;
       document.getElementById('prodStock').value = p.stock;
       tempProductImage = p.img || '';
       document.getElementById('productPreviewImg').src = p.img || 'https://placehold.co/150x150/1e293b/94a3b8?text=Foto';
+      setProductSaveButtonLoading(false, tempProductImage && tempProductImage.includes('drive.google.com') 
+        ? '<span class="text-emerald-400 font-semibold">✅ Foto aktif tersimpan di Google Drive</span>'
+        : '<span class="text-slate-500">Format JPG, PNG atau WebP</span>');
       openModal('productModal');
     }
 
@@ -4581,11 +4636,23 @@ Matur Suksma!`;
       const webhookUrl = getStored(KEY_WEBHOOK, '');
       const previewImg = document.getElementById('productPreviewImg');
 
+      // KUNCI TOMBOL SIMPAN BARANG
+      setProductSaveButtonLoading(true);
       showToast('Memproses dan mengompres foto barang...', 'info');
 
       const reader = new FileReader();
+      reader.onerror = () => {
+        setProductSaveButtonLoading(false, '<span class="text-rose-400">❌ Gagal membaca file gambar</span>');
+        showToast('Gagal membaca file gambar!', 'error');
+      };
+
       reader.onload = async (event) => {
         const img = new Image();
+        img.onerror = () => {
+          setProductSaveButtonLoading(false, '<span class="text-rose-400">❌ Format gambar tidak valid</span>');
+          showToast('Gambar tidak valid!', 'error');
+        };
+
         img.onload = async () => {
           // Kompresi resolusi gambar (maksimal lebar/tinggi 500px)
           const MAX_SIZE = 500;
@@ -4616,7 +4683,7 @@ Matur Suksma!`;
 
           // Jika webhook Google Apps Script aktif, langsung upload ke Google Drive
           if (webhookUrl) {
-            showToast('Mengunggah foto ke Google Drive...', 'info');
+            showToast('Sedang mengunggah foto ke Google Drive... Tombol simpan dinonaktifkan sementara.', 'info');
             try {
               const base64Data = compressedDataUrl.split(',')[1];
               const response = await fetch(webhookUrl, {
@@ -4634,17 +4701,20 @@ Matur Suksma!`;
               if (result && result.status === 'success' && result.fileUrl) {
                 tempProductImage = result.fileUrl; // Menyimpan link URL Google Drive
                 previewImg.src = result.fileUrl;
-                showToast('✅ Foto barang tersimpan di Google Drive!', 'success');
+                setProductSaveButtonLoading(false, '<span class="text-emerald-400 font-semibold">✅ Foto berhasil diupload ke Google Drive!</span>');
+                showToast('✅ Foto barang tersimpan di Google Drive! Tombol simpan kini aktif.', 'success');
               } else {
                 throw new Error(result.message || 'Gagal menerima URL file dari Drive');
               }
             } catch (err) {
               console.warn('Gagal upload ke Drive, memakai fallback lokal kompresi:', err);
               tempProductImage = compressedDataUrl;
+              setProductSaveButtonLoading(false, '<span class="text-amber-400 font-semibold">⚠️ Foto disimpan lokal (Webhook offline)</span>');
               showToast('Webhook Drive belum merespon. Foto disimpan lokal (terkompresi).', 'info');
             }
           } else {
             tempProductImage = compressedDataUrl;
+            setProductSaveButtonLoading(false, '<span class="text-amber-400">⚠️ Webhook Drive belum diatur (Tersimpan lokal)</span>');
             showToast('Foto dikompresi. Atur Webhook di Integrasi untuk upload langsung ke Google Drive.', 'info');
           }
         };
@@ -4654,6 +4724,11 @@ Matur Suksma!`;
     }
 
     function saveProductData() {
+      if (isProductImageUploading) {
+        showToast('Mohon tunggu, foto sedang diunggah ke Google Drive!', 'error');
+        return;
+      }
+
       const id = document.getElementById('prodEditId')?.value;
       const name = document.getElementById('prodName')?.value.trim();
       const cat = document.getElementById('prodCategory')?.value;
