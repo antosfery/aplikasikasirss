@@ -1048,7 +1048,7 @@
                   <th class="p-4">No. Telp (WA)</th>
                   <th class="p-4">Total Tarif</th>
                   <th class="p-4">Status Bayar</th>
-                  <th class="p-4 text-center">Aksi</th>
+                  <th class="p-4 text-center admin-only" id="thDeleteBookingCol">Aksi</th>
                 </tr>
               </thead>
               <tbody id="bookingTableBody" class="divide-y divide-slate-800/60 font-mono">
@@ -1138,7 +1138,7 @@
                   <th class="p-4">Biaya (Rp)</th>
                   <th class="p-4">Dicatat Oleh</th>
                   <th class="p-4">Catatan</th>
-                  <th class="p-4 text-center">Hapus</th>
+                  <th class="p-4 text-center admin-only" id="thDeleteExpenseCol">Aksi</th>
                 </tr>
               </thead>
               <tbody id="expenseTableBody" class="divide-y divide-slate-800/60 font-mono">
@@ -4070,9 +4070,11 @@ Matur Suksma!`;
       if (!body) return;
 
       const filtered = bookings.filter(b => !filterDate || b.date === filterDate);
+      const isAdmin = currentUser && currentUser.role === 'Admin';
+      const colSpan = isAdmin ? 7 : 6;
 
       if (filtered.length === 0) {
-        body.innerHTML = `<tr><td colspan="7" class="p-8 text-center text-slate-500">Tidak ada jadwal booking pada tanggal ini.</td></tr>`;
+        body.innerHTML = `<tr><td colspan="${colSpan}" class="p-8 text-center text-slate-500">Tidak ada jadwal booking pada tanggal ini.</td></tr>`;
         return;
       }
 
@@ -4091,11 +4093,13 @@ Matur Suksma!`;
               ${b.paymentStatus}
             </span>
           </td>
-          <td class="p-4 text-center whitespace-nowrap">
-            <button onclick="deleteBooking('${b.bookingId}')" class="p-1.5 rounded-lg bg-rose-950/40 hover:bg-rose-900/60 text-rose-400 text-xs">
-              <i data-lucide="trash-2" class="w-4 h-4"></i>
-            </button>
-          </td>
+          ${isAdmin ? `
+            <td class="p-4 text-center whitespace-nowrap admin-only">
+              <button onclick="deleteBooking('${b.bookingId}')" title="Hapus Booking (Khusus Admin)" class="p-1.5 rounded-lg bg-rose-950/40 hover:bg-rose-900/60 text-rose-400 text-xs transition-all">
+                <i data-lucide="trash-2" class="w-4 h-4"></i>
+              </button>
+            </td>
+          ` : ''}
         </tr>
       `).join('');
 
@@ -4119,6 +4123,10 @@ Matur Suksma!`;
     }
 
     function deleteBooking(bId) {
+      if (!currentUser || currentUser.role !== 'Admin') {
+        showToast('Akses ditolak! Hanya Administrator yang berhak menghapus data booking.', 'error');
+        return;
+      }
       bookings = bookings.filter(b => b.bookingId !== bId);
       setStored(KEY_BOOKINGS, bookings);
       renderBookingList();
@@ -4182,9 +4190,11 @@ Matur Suksma!`;
       if (!body) return;
 
       const filtered = expenses.filter(e => currentExpenseFilter === 'ALL' || e.category === currentExpenseFilter);
+      const isAdmin = currentUser && currentUser.role === 'Admin';
+      const colSpan = isAdmin ? 7 : 6;
 
       if (filtered.length === 0) {
-        body.innerHTML = `<tr><td colspan="7" class="p-8 text-center text-slate-500">Belum ada data pengeluaran.</td></tr>`;
+        body.innerHTML = `<tr><td colspan="${colSpan}" class="p-8 text-center text-slate-500">Belum ada data pengeluaran.</td></tr>`;
         return;
       }
 
@@ -4200,11 +4210,13 @@ Matur Suksma!`;
           <td class="p-4 text-rose-400 font-mono font-bold whitespace-nowrap">${formatRupiah(e.amount)}</td>
           <td class="p-4 text-slate-300 whitespace-nowrap">${e.recordedBy || 'Petugas'}</td>
           <td class="p-4 text-slate-400 max-w-xs truncate">${e.notes || '-'}</td>
-          <td class="p-4 text-center whitespace-nowrap">
-            <button onclick="deleteExpense('${e.id}')" class="p-1.5 rounded-lg bg-rose-950/40 hover:bg-rose-900/60 text-rose-400 text-xs">
-              <i data-lucide="trash-2" class="w-4 h-4"></i>
-            </button>
-          </td>
+          ${isAdmin ? `
+            <td class="p-4 text-center whitespace-nowrap admin-only">
+              <button onclick="deleteExpense('${e.id}')" title="Hapus Pengeluaran (Khusus Admin)" class="p-1.5 rounded-lg bg-rose-950/40 hover:bg-rose-900/60 text-rose-400 text-xs transition-all">
+                <i data-lucide="trash-2" class="w-4 h-4"></i>
+              </button>
+            </td>
+          ` : ''}
         </tr>
       `).join('');
 
@@ -4212,6 +4224,10 @@ Matur Suksma!`;
     }
 
     function deleteExpense(expId) {
+      if (!currentUser || currentUser.role !== 'Admin') {
+        showToast('Akses ditolak! Hanya Administrator yang berhak menghapus pengeluaran.', 'error');
+        return;
+      }
       expenses = expenses.filter(e => e.id !== expId);
       setStored(KEY_EXPENSES, expenses);
       renderExpenseTable();
@@ -4616,6 +4632,10 @@ Matur Suksma!`;
     }
 
     function deleteProduct(id) {
+      if (!currentUser || currentUser.role !== 'Admin') {
+        showToast('Akses ditolak! Hanya Administrator yang berhak menghapus barang inventori.', 'error');
+        return;
+      }
       products = products.filter(p => p.id !== id);
       setStored(KEY_PRODUCTS, products);
       renderInventoryTable();
