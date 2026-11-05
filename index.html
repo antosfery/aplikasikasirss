@@ -3332,6 +3332,32 @@ Matur Suksma!`;
       }
     }
 
+    // Suara pelafalan nama barang saat dimasukkan ke keranjang kasir
+    function playItemNameVoice(itemName) {
+      if (!itemName) return;
+      try {
+        if ('speechSynthesis' in window) {
+          window.speechSynthesis.cancel(); // Hentikan antrean suara sebelumnya agar responsif saat klik cepat
+          const utterance = new SpeechSynthesisUtterance(itemName);
+          utterance.lang = 'id-ID';
+          utterance.rate = 1.05;
+          utterance.pitch = 1.02;
+          utterance.volume = 1.0;
+
+          const voices = window.speechSynthesis.getVoices();
+          const idVoice = voices.find(v => v.lang === 'id-ID' || v.lang === 'id' || v.lang.startsWith('id'));
+          if (idVoice) utterance.voice = idVoice;
+
+          // Berikan jeda 130ms agar bunyi tot-tot kasir selesai terlebih dahulu
+          setTimeout(() => {
+            window.speechSynthesis.speak(utterance);
+          }, 130);
+        }
+      } catch (e) {
+        console.warn('SpeechSynthesis item voice error:', e);
+      }
+    }
+
     // Fungsi Terbilang Bahasa Indonesia untuk pelafalan total belanja
     function angkaTerbilang(nilai) {
       const bilangan = ['', 'satu', 'dua', 'tiga', 'empat', 'lima', 'enam', 'tujuh', 'delapan', 'sembilan', 'sepuluh', 'sebelas'];
@@ -3438,8 +3464,9 @@ Matur Suksma!`;
         });
       }
 
-      // Mainkan suara "tot tot" kasir
+      // Mainkan suara "tot tot" kasir dan sebutkan nama barang
       playCartBeep();
+      playItemNameVoice(prod.name);
 
       renderCart();
     }
@@ -3457,8 +3484,9 @@ Matur Suksma!`;
       if (item.qty <= 0) {
         cart = cart.filter(i => i.id !== prodId);
       } else if (delta > 0) {
-        // Mainkan suara saat menambah kuantitas di keranjang (+)
+        // Mainkan suara saat menambah kuantitas di keranjang (+) dan sebutkan nama barang
         playCartBeep();
+        playItemNameVoice(item.name);
       }
 
       renderCart();
