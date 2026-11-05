@@ -1168,6 +1168,20 @@
           </div>
         </div>
 
+        <!-- Filter Karyawan & Keterangan Urutan -->
+        <div class="bg-slate-900 border border-slate-800 p-4 rounded-2xl flex flex-wrap items-center justify-between gap-3 text-xs">
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="text-slate-400 font-semibold">Filter Karyawan:</span>
+            <select id="attFilterEmployee" onchange="renderAttendancePage()" class="bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500">
+              <option value="ALL">-- Semua Karyawan --</option>
+            </select>
+          </div>
+          <div class="text-[11px] text-emerald-400/90 font-mono flex items-center gap-1.5">
+            <i data-lucide="arrow-down-up" class="w-3.5 h-3.5"></i>
+            <span>Tersortir: Nama Karyawan (A-Z) &bull; Tanggal Berurutan</span>
+          </div>
+        </div>
+
         <!-- Attendance Table -->
         <div class="bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden">
           <div class="overflow-x-auto">
@@ -1273,6 +1287,7 @@
                     <th class="p-3">Kasir</th>
                     <th class="p-3">Uang Fisik</th>
                     <th class="p-3">Selisih</th>
+                    <th class="p-3 text-center">Aksi</th>
                   </tr>
                 </thead>
                 <tbody id="closingHistoryBody" class="divide-y divide-slate-800/60 font-mono">
@@ -1984,6 +1999,11 @@
           <select id="attEmployeeSelect" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white mt-1">
             <!-- Loaded via JS -->
           </select>
+        </div>
+
+        <div>
+          <label class="text-slate-400">Tanggal Absensi *</label>
+          <input type="date" id="attDate" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-mono mt-1 focus:outline-none focus:border-emerald-500">
         </div>
 
         <div class="grid grid-cols-2 gap-3">
@@ -4390,6 +4410,14 @@ Matur Suksma!`;
         `).join('');
       }
 
+      const filterSelect = document.getElementById('attFilterEmployee');
+      if (filterSelect) {
+        const curVal = filterSelect.value || 'ALL';
+        filterSelect.innerHTML = `<option value="ALL">-- Semua Karyawan --</option>` +
+          employees.map(emp => `<option value="${emp.name}">${emp.name}</option>`).join('');
+        filterSelect.value = curVal;
+      }
+
       const body = document.getElementById('attendanceTableBody');
       if (!body) return;
 
@@ -4401,9 +4429,26 @@ Matur Suksma!`;
         return;
       }
 
-      body.innerHTML = attendance.slice().reverse().map(a => `
+      const filterEmp = document.getElementById('attFilterEmployee')?.value || 'ALL';
+      let list = attendance.filter(a => filterEmp === 'ALL' || a.employeeName === filterEmp);
+
+      // Sortir: Berdasarkan Nama Karyawan (A-Z), lalu Tanggal berurutan secara kronologis (dari terlama ke terbaru)
+      list.sort((a, b) => {
+        const nameComparison = (a.employeeName || '').localeCompare(b.employeeName || '', 'id');
+        if (nameComparison !== 0) {
+          return nameComparison;
+        }
+        return (a.date || '').localeCompare(b.date || '');
+      });
+
+      if (list.length === 0) {
+        body.innerHTML = `<tr><td colspan="${colSpan}" class="p-8 text-center text-slate-500">Tidak ada catatan absensi untuk karyawan yang dipilih.</td></tr>`;
+        return;
+      }
+
+      body.innerHTML = list.map(a => `
         <tr class="hover:bg-slate-800/40">
-          <td class="p-4 text-slate-400 whitespace-nowrap">${a.date}</td>
+          <td class="p-4 text-slate-400 whitespace-nowrap font-mono">${a.date}</td>
           <td class="p-4 text-white font-bold whitespace-nowrap">${a.employeeName}</td>
           <td class="p-4 text-slate-300 whitespace-nowrap">${a.role || '-'}</td>
           <td class="p-4 text-slate-400 font-mono whitespace-nowrap">${a.timeIn} - ${a.timeOut}</td>
@@ -4450,6 +4495,10 @@ Matur Suksma!`;
 
     function openAttendanceModal() {
       renderAttendancePage();
+      const dateInput = document.getElementById('attDate');
+      if (dateInput) {
+        dateInput.value = new Date().toISOString().slice(0, 10);
+      }
       document.getElementById('attKasbon').value = '';
       document.getElementById('attKasbonReason').value = '';
       openModal('attendanceModal');
@@ -4458,15 +4507,21 @@ Matur Suksma!`;
     function saveAttendanceData() {
       const empName = document.getElementById('attEmployeeSelect')?.value;
       const emp = employees.find(e => e.name === empName);
-      const timeIn = document.getElementById('attTimeIn')?.value;
-      const timeOut = document.getElementById('attTimeOut')?.value;
-      const status = document.getElementById('attStatus')?.value;
+      const inputDate = document.getElementById('attDate')?.value || new Date().toISOString().slice(0, 10);
+      const timeIn = document.getElementById('attTimeIn')?.value || '08:00';
+      const timeOut = document.getElementById('attTimeOut')?.value || '17:00';
+      const status = document.getElementById('attStatus')?.value || 'HADIR';
       const kasbon = Number(document.getElementById('attKasbon')?.value || 0);
       const reason = document.getElementById('attKasbonReason')?.value.trim() || '-';
 
+      if (!empName) {
+        showToast('Pilih nama karyawan terlebih dahulu!', 'error');
+        return;
+      }
+
       const att = {
         id: 'ATT-' + Date.now().toString().slice(-6),
-        date: new Date().toISOString().slice(0, 10),
+        date: inputDate,
         employeeName: empName,
         role: emp ? emp.role : 'Kasir',
         timeIn: timeIn,
@@ -4480,7 +4535,7 @@ Matur Suksma!`;
       setStored(KEY_ATTENDANCE, attendance);
       closeModal('attendanceModal');
       renderAttendancePage();
-      showToast('Absensi karyawan berhasil disimpan!', 'success');
+      showToast(`Absensi ${empName} (${inputDate}) berhasil disimpan!`, 'success');
     }
 
     function openEmployeeMasterModal() {
@@ -4637,18 +4692,49 @@ Matur Suksma!`;
       if (!body) return;
 
       if (closings.length === 0) {
-        body.innerHTML = `<tr><td colspan="4" class="p-4 text-center text-slate-500">Belum ada riwayat tutup kasir.</td></tr>`;
+        body.innerHTML = `<tr><td colspan="5" class="p-4 text-center text-slate-500">Belum ada riwayat tutup kasir.</td></tr>`;
         return;
       }
 
       body.innerHTML = closings.slice().reverse().map(c => `
-        <tr>
-          <td class="p-3 text-slate-400">${c.date}</td>
-          <td class="p-3 text-white font-bold">${c.cashierName}</td>
-          <td class="p-3 text-emerald-400 font-mono">${formatRupiah(c.actualCash)}</td>
-          <td class="p-3 font-mono ${c.difference < 0 ? 'text-rose-400' : 'text-slate-300'}">${formatRupiah(c.difference)}</td>
+        <tr class="hover:bg-slate-800/40">
+          <td class="p-3 text-slate-400 whitespace-nowrap">${c.date}</td>
+          <td class="p-3 text-white font-bold whitespace-nowrap">${c.cashierName}</td>
+          <td class="p-3 text-emerald-400 font-mono whitespace-nowrap">${formatRupiah(c.actualCash)}</td>
+          <td class="p-3 font-mono whitespace-nowrap ${c.difference < 0 ? 'text-rose-400' : 'text-slate-300'}">${formatRupiah(c.difference)}</td>
+          <td class="p-3 text-center whitespace-nowrap">
+            <button type="button" onclick="deleteClosingRecord('${c.id}')" title="Hapus Riwayat Tutup Kasir" class="p-1.5 rounded-lg bg-rose-950/40 hover:bg-rose-900/70 text-rose-400 transition-all inline-flex items-center gap-1 text-[11px]">
+              <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+              <span class="hidden sm:inline">Hapus</span>
+            </button>
+          </td>
         </tr>
       `).join('');
+
+      try { lucide.createIcons(); } catch (e) {}
+    }
+
+    function deleteClosingRecord(closingId) {
+      if (!currentUser || currentUser.role !== 'Admin') {
+        showToast('Akses ditolak! Hanya Administrator yang berhak menghapus riwayat tutup kasir.', 'error');
+        return;
+      }
+
+      const closingIndex = closings.findIndex(c => c.id === closingId);
+      if (closingIndex === -1) {
+        showToast('Data riwayat tutup kasir tidak ditemukan!', 'error');
+        return;
+      }
+
+      const target = closings[closingIndex];
+      if (!confirm(`Yakin ingin menghapus catatan tutup kasir tanggal ${target.date} oleh ${target.cashierName}?`)) {
+        return;
+      }
+
+      closings.splice(closingIndex, 1);
+      setStored(KEY_CLOSINGS, closings);
+      renderClosingHistory();
+      showToast(`Catatan tutup kasir (${target.date}) berhasil dihapus.`, 'success');
     }
 
     // ==========================================
