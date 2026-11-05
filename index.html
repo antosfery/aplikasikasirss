@@ -244,6 +244,12 @@
               <span id="liveClock" class="font-mono">17:00 WITA</span>
             </div>
 
+            <!-- Auto Cloud Sync Badge Indicator -->
+            <div id="cloudSyncBadge" class="hidden sm:flex items-center gap-1.5 text-[11px] font-semibold text-slate-400 bg-slate-950/60 border border-slate-800 px-2.5 py-1.5 rounded-xl transition-all" title="Status Sinkronisasi Firebase Cloud">
+              <span id="cloudSyncDot" class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+              <span id="cloudSyncText" class="font-mono text-slate-300">Cloud Sync</span>
+            </div>
+
             <div class="flex items-center gap-2">
               <div class="text-right hidden sm:block">
                 <span id="navUserName" class="block text-xs font-bold text-white">Petugas Kasir</span>
@@ -590,7 +596,7 @@
             <div class="bg-slate-900 border border-slate-800 p-6 rounded-3xl lg:col-span-2">
               <h3 class="font-bold text-white text-base mb-1">Tren Penjualan 7 Hari</h3>
               <p class="text-xs text-slate-400 mb-4">Grafik omset harian kasir & booking lapangan</p>
-              <div class="h-64">
+              <div class="relative w-full h-64">
                 <canvas id="salesTrendChart"></canvas>
               </div>
             </div>
@@ -598,7 +604,7 @@
             <div class="bg-slate-900 border border-slate-800 p-6 rounded-3xl">
               <h3 class="font-bold text-white text-base mb-1">Proporsi Pembayaran</h3>
               <p class="text-xs text-slate-400 mb-4">Perbandingan Cash vs QRIS vs Bon</p>
-              <div class="h-64 flex items-center justify-center">
+              <div class="relative w-full h-64 flex items-center justify-center">
                 <canvas id="paymentMethodChart"></canvas>
               </div>
             </div>
@@ -789,6 +795,7 @@
                   <th class="p-4">Total Belanja</th>
                   <th class="p-4">Metode</th>
                   <th class="p-4 text-center">Cetak Nota</th>
+                  <th class="p-4 text-center admin-only" id="thDeleteTrxCol">Aksi</th>
                 </tr>
               </thead>
               <tbody id="salesReportTableBody" class="divide-y divide-slate-800/60 font-mono">
@@ -1174,6 +1181,7 @@
                   <th class="p-4">Status</th>
                   <th class="p-4">Kasbon (Rp)</th>
                   <th class="p-4">Keperluan Kasbon</th>
+                  <th class="p-4 text-center admin-only" id="thDeleteAttendanceCol">Aksi</th>
                 </tr>
               </thead>
               <tbody id="attendanceTableBody" class="divide-y divide-slate-800/60 font-mono">
@@ -2240,6 +2248,8 @@
       } catch (e) {
         console.warn('Storage quota exceeded or error:', e);
       }
+      // Pemicu sinkronisasi cloud otomatis setiap ada perubahan data
+      triggerAutoCloudSync(key, value);
     }
 
     // Default User Database
@@ -2330,6 +2340,10 @@
     let customQrisUrl = getStored(KEY_QRIS, DEFAULT_QRIS);
     let firebaseConfig = getStored(KEY_FIREBASE, OFFICIAL_FIREBASE_CONFIG);
 
+    // Chart.js Global Instances
+    let trendChart = null;
+    let methodChart = null;
+
     // POS & UI Interactive States
     let cart = [];
     let currentPosCategory = 'ALL';
@@ -2343,10 +2357,8 @@
     let fbAuth = null;
     let fbDb = null;
     let fbUser = null;
-
-    // Chart.js Instances
-    let trendChart = null;
-    let methodChart = null;
+    let isCloudReady = false;
+    let cloudSyncDebounceTimer = null;
 
     // Toast Utility
     function showToast(message, type = 'success') {
@@ -3040,8 +3052,11 @@ Matur Suksma!`;
       // Render Tabel
       if (!body) return;
 
+      const isAdmin = currentUser && currentUser.role === 'Admin';
+      const colSpan = isAdmin ? 8 : 7;
+
       if (list.length === 0) {
-        body.innerHTML = `<tr><td colspan="7" class="p-8 text-center text-slate-500">Tidak ada riwayat penjualan pada filter rentang tanggal yang dipilih.</td></tr>`;
+        body.innerHTML = `<tr><td colspan="${colSpan}" class="p-8 text-center text-slate-500">Tidak ada riwayat penjualan pada filter rentang tanggal yang dipilih.</td></tr>`;
         return;
       }
 
@@ -3067,11 +3082,56 @@ Matur Suksma!`;
                 <span class="hidden sm:inline">Nota</span>
               </button>
             </td>
+            ${isAdmin ? `
+              <td class="p-4 text-center whitespace-nowrap admin-only">
+                <button type="button" onclick="deleteSalesTransaction('${t.id}')" title="Hapus Riwayat Penjualan (Khusus Admin)" class="p-1.5 rounded-lg bg-rose-950/40 hover:bg-rose-900/70 text-rose-400 transition-all inline-flex items-center gap-1 text-[11px]">
+                  <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                  <span class="hidden sm:inline">Hapus</span>
+                </button>
+              </td>
+            ` : ''}
           </tr>
         `;
       }).join('');
 
       try { lucide.createIcons(); } catch (e) {}
+    }
+
+    function deleteSalesTransaction(trxId) {
+      if (!currentUser || currentUser.role !== 'Admin') {
+        showToast('Akses ditolak! Hanya Administrator yang dapat menghapus transaksi penjualan.', 'error');
+        return;
+      }
+
+      const trxIndex = transactions.findIndex(t => t.id === trxId);
+      if (trxIndex === -1) {
+        showToast('Data transaksi tidak ditemukan!', 'error');
+        return;
+      }
+
+      const targetTrx = transactions[trxIndex];
+
+      // Kembalikan stok barang yang sebelumnya terjual (Rollback Stock)
+      if (Array.isArray(targetTrx.items)) {
+        targetTrx.items.forEach(item => {
+          const prod = products.find(p => p.id === item.id || p.name === item.name);
+          if (prod) {
+            prod.stock = Number(prod.stock || 0) + Number(item.qty || 0);
+          }
+        });
+        setStored(KEY_PRODUCTS, products);
+      }
+
+      // Hapus data transaksi dari list
+      transactions.splice(trxIndex, 1);
+      setStored(KEY_TRANSACTIONS, transactions);
+
+      // Refresh seluruh tampilan data terkait
+      renderFilteredSalesReport();
+      renderDashboard();
+      renderPosCatalog();
+      renderInventoryTable();
+      showToast(`Transaksi ${targetTrx.receiptNo || targetTrx.id} berhasil dihapus & stok barang telah dikembalikan!`, 'success');
     }
 
     function exportFilteredSalesToExcel() {
@@ -3540,8 +3600,11 @@ Matur Suksma!`;
 
       if (headerTotal) headerTotal.innerText = formatRupiah(unpaidTotal);
 
+      const isAdmin = currentUser && currentUser.role === 'Admin';
+      const colSpan = isAdmin ? 8 : 7;
+
       if (bons.length === 0) {
-        body.innerHTML = `<tr><td colspan="7" class="p-8 text-center text-slate-500">Belum ada catatan bon pemain.</td></tr>`;
+        body.innerHTML = `<tr><td colspan="${colSpan}" class="p-8 text-center text-slate-500">Belum ada catatan bon pemain.</td></tr>`;
         return;
       }
 
@@ -3562,17 +3625,59 @@ Matur Suksma!`;
               </span>
             </td>
             <td class="p-4 text-center whitespace-nowrap">
-              ${b.status !== 'LUNAS' ? `
-                <button onclick="settleBon('${b.id}')" class="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold transition-all shadow-sm">
-                  Lunasi
-                </button>
-              ` : '<span class="text-slate-500 text-xs">Selesai</span>'}
+              <div class="flex items-center justify-center gap-1.5">
+                ${b.status !== 'LUNAS' ? `
+                  <button onclick="settleBon('${b.id}')" class="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold transition-all shadow-sm">
+                    Lunasi
+                  </button>
+                ` : '<span class="text-slate-500 text-xs">Selesai</span>'}
+                ${isAdmin ? `
+                  <button type="button" onclick="deleteBon('${b.id}')" title="Hapus Bon (Khusus Admin)" class="p-1 rounded-lg bg-rose-950/40 hover:bg-rose-900/70 text-rose-400 transition-all text-xs">
+                    <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                  </button>
+                ` : ''}
+              </div>
             </td>
           </tr>
         `;
       }).join('');
 
       try { lucide.createIcons(); } catch (e) {}
+    }
+
+    function deleteBon(bonId) {
+      if (!currentUser || currentUser.role !== 'Admin') {
+        showToast('Akses ditolak! Hanya Administrator yang dapat menghapus data bon.', 'error');
+        return;
+      }
+
+      const bonIndex = bons.findIndex(b => b.id === bonId);
+      if (bonIndex === -1) {
+        showToast('Data bon tidak ditemukan!', 'error');
+        return;
+      }
+
+      const targetBon = bons[bonIndex];
+
+      // Jika bon belum lunas, kembalikan stok barang yang sebelumnya dikeluarkan
+      if (targetBon.status === 'BELUM_LUNAS' && Array.isArray(targetBon.items)) {
+        targetBon.items.forEach(item => {
+          const prod = products.find(p => p.id === item.id || p.name === item.name);
+          if (prod) {
+            prod.stock = Number(prod.stock || 0) + Number(item.qty || 0);
+          }
+        });
+        setStored(KEY_PRODUCTS, products);
+      }
+
+      bons.splice(bonIndex, 1);
+      setStored(KEY_BONS, bons);
+
+      renderBonTable();
+      updateBonBadge();
+      renderDashboard();
+      renderPosCatalog();
+      showToast(`Data bon untuk ${targetBon.playerName} berhasil dihapus!`, 'success');
     }
 
     function settleBon(bonId) {
@@ -3678,7 +3783,10 @@ Matur Suksma!`;
         document.getElementById('adminTodayExpenses').innerText = formatRupiah(todayExpenses);
         document.getElementById('adminTotalBonUnpaid').innerText = formatRupiah(unpaidBonTotal);
 
-        renderCharts();
+        // Berikan jeda sejenak untuk memastikan kontainer canvas sudah ter-render sempurna di DOM
+        setTimeout(() => {
+          renderCharts();
+        }, 80);
       }
     }
 
@@ -3691,7 +3799,7 @@ Matur Suksma!`;
 
         // Pastikan pustaka Chart.js tersedia
         if (typeof Chart === 'undefined') {
-          console.warn('Chart.js library is not loaded');
+          console.warn('Pustaka Chart.js belum selesai dimuat.');
           return;
         }
 
@@ -3704,11 +3812,11 @@ Matur Suksma!`;
           const dStr = d.toISOString().slice(0, 10);
           labels.push(d.toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric' }));
 
-          const sumTrx = transactions
+          const sumTrx = (transactions || [])
             .filter(t => (t.date || '').slice(0, 10) === dStr)
             .reduce((acc, t) => acc + Number(t.total || 0), 0);
 
-          const sumBkg = bookings
+          const sumBkg = (bookings || [])
             .filter(b => (b.date || '').slice(0, 10) === dStr)
             .reduce((acc, b) => acc + Number(b.downPayment || 0), 0);
 
@@ -3717,7 +3825,7 @@ Matur Suksma!`;
 
         // 1. Line Chart: Tren Penjualan 7 Hari
         if (trendChart) {
-          trendChart.destroy();
+          try { trendChart.destroy(); } catch (e) {}
           trendChart = null;
         }
 
@@ -3735,6 +3843,8 @@ Matur Suksma!`;
               fill: true,
               borderWidth: 2.5,
               pointBackgroundColor: '#10b981',
+              pointBorderColor: '#ffffff',
+              pointBorderWidth: 1.5,
               pointRadius: 4,
               pointHoverRadius: 6
             }]
@@ -3742,12 +3852,19 @@ Matur Suksma!`;
           options: {
             responsive: true,
             maintainAspectRatio: false,
+            animation: { duration: 600 },
             plugins: { 
               legend: { display: false },
               tooltip: {
+                backgroundColor: '#0f172a',
+                titleColor: '#f8fafc',
+                bodyColor: '#34d399',
+                borderColor: '#1e293b',
+                borderWidth: 1,
+                padding: 10,
                 callbacks: {
                   label: function(context) {
-                    return ' ' + formatRupiah(context.parsed.y);
+                    return ' Omset: ' + formatRupiah(context.parsed.y);
                   }
                 }
               }
@@ -3776,13 +3893,13 @@ Matur Suksma!`;
         // 2. Doughnut Chart: Proporsi Pembayaran
         let cashCount = 0;
         let qrisCount = 0;
-        transactions.forEach(t => {
+        (transactions || []).forEach(t => {
           if (t.method === 'CASH') cashCount += Number(t.total || 0);
           if (t.method === 'QRIS') qrisCount += Number(t.total || 0);
         });
 
         if (methodChart) {
-          methodChart.destroy();
+          try { methodChart.destroy(); } catch (e) {}
           methodChart = null;
         }
 
@@ -3803,20 +3920,27 @@ Matur Suksma!`;
           options: {
             responsive: true,
             maintainAspectRatio: false,
-            cutout: '68%',
+            cutout: '70%',
+            animation: { duration: 600 },
             plugins: { 
               legend: { 
                 position: 'bottom', 
                 labels: { 
                   color: '#94a3b8',
                   boxWidth: 12,
+                  padding: 14,
                   font: { size: 11, family: 'Inter' }
                 } 
               },
               tooltip: {
+                backgroundColor: '#0f172a',
+                titleColor: '#f8fafc',
+                bodyColor: '#38bdf8',
+                borderColor: '#1e293b',
+                borderWidth: 1,
                 callbacks: {
                   label: function(context) {
-                    if (!hasData) return ' Belum ada data';
+                    if (!hasData) return ' Belum ada data transaksi';
                     return ' ' + context.label + ': ' + formatRupiah(context.raw);
                   }
                 }
@@ -3825,7 +3949,7 @@ Matur Suksma!`;
           }
         });
       } catch (e) {
-        console.warn('Chart render error:', e);
+        console.error('Error saat merender chart:', e);
       }
     }
 
@@ -4108,8 +4232,11 @@ Matur Suksma!`;
       const body = document.getElementById('attendanceTableBody');
       if (!body) return;
 
+      const isAdmin = currentUser && currentUser.role === 'Admin';
+      const colSpan = isAdmin ? 8 : 7;
+
       if (attendance.length === 0) {
-        body.innerHTML = `<tr><td colspan="7" class="p-8 text-center text-slate-500">Belum ada catatan absensi.</td></tr>`;
+        body.innerHTML = `<tr><td colspan="${colSpan}" class="p-8 text-center text-slate-500">Belum ada catatan absensi.</td></tr>`;
         return;
       }
 
@@ -4126,10 +4253,38 @@ Matur Suksma!`;
           </td>
           <td class="p-4 text-amber-400 font-mono font-bold whitespace-nowrap">${a.kasbonAmount ? formatRupiah(a.kasbonAmount) : '-'}</td>
           <td class="p-4 text-slate-400 max-w-xs truncate">${a.kasbonReason || '-'}</td>
+          ${isAdmin ? `
+            <td class="p-4 text-center whitespace-nowrap admin-only">
+              <button type="button" onclick="deleteAttendance('${a.id}')" title="Hapus Data Absensi (Khusus Admin)" class="p-1.5 rounded-lg bg-rose-950/40 hover:bg-rose-900/70 text-rose-400 transition-all inline-flex items-center gap-1 text-[11px]">
+                <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                <span class="hidden sm:inline">Hapus</span>
+              </button>
+            </td>
+          ` : ''}
         </tr>
       `).join('');
 
       try { lucide.createIcons(); } catch (e) {}
+    }
+
+    function deleteAttendance(attId) {
+      if (!currentUser || currentUser.role !== 'Admin') {
+        showToast('Akses ditolak! Hanya Administrator yang dapat menghapus data absensi.', 'error');
+        return;
+      }
+
+      const attIndex = attendance.findIndex(a => a.id === attId);
+      if (attIndex === -1) {
+        showToast('Data absensi tidak ditemukan!', 'error');
+        return;
+      }
+
+      const targetAtt = attendance[attIndex];
+      attendance.splice(attIndex, 1);
+      setStored(KEY_ATTENDANCE, attendance);
+
+      renderAttendancePage();
+      showToast(`Data absensi ${targetAtt.employeeName} (${targetAtt.date}) berhasil dihapus!`, 'success');
     }
 
     function openAttendanceModal() {
@@ -4564,6 +4719,160 @@ Matur Suksma!`;
     }
 
     // ==========================================
+    // AUTO CLOUD SYNC & FIREBASE CLIENT CORE
+    // ==========================================
+    function updateCloudSyncStatus(status, text) {
+      const dot = document.getElementById('cloudSyncDot');
+      const label = document.getElementById('cloudSyncText');
+      if (!dot || !label) return;
+
+      if (status === 'ONLINE') {
+        dot.className = 'w-2 h-2 rounded-full bg-emerald-400';
+        label.innerText = text || 'Cloud Aktif';
+        label.className = 'font-mono text-emerald-400 font-bold';
+      } else if (status === 'SYNCING') {
+        dot.className = 'w-2 h-2 rounded-full bg-amber-400 animate-spin';
+        label.innerText = text || 'Menyimpan...';
+        label.className = 'font-mono text-amber-300';
+      } else if (status === 'ERROR') {
+        dot.className = 'w-2 h-2 rounded-full bg-rose-400';
+        label.innerText = text || 'Cloud Offline';
+        label.className = 'font-mono text-rose-400';
+      }
+    }
+
+    async function initAutoFirebaseIntegration() {
+      if (!window.FB_SDK) return;
+      try {
+        updateCloudSyncStatus('SYNCING', 'Menghubungkan Cloud...');
+        const client = initFirebaseClient();
+        if (!client) {
+          updateCloudSyncStatus('ERROR', 'Gagal Init SDK');
+          return;
+        }
+
+        // Login Anonim Otomatis
+        if (!client.fbAuth.currentUser) {
+          const cred = await window.FB_SDK.signInAnonymously(client.fbAuth);
+          fbUser = cred.user;
+        } else {
+          fbUser = client.fbAuth.currentUser;
+        }
+
+        isCloudReady = true;
+        updateCloudSyncStatus('ONLINE', 'Cloud Aktif');
+
+        // Otomatis tarik data terbaru dari cloud jika ada
+        await pullLatestDataFromFirebaseCloud();
+      } catch (err) {
+        console.warn('Auto Firebase initialization failed, running in local-first mode:', err);
+        updateCloudSyncStatus('ERROR', 'Offline (Lokal)');
+      }
+    }
+
+    async function pullLatestDataFromFirebaseCloud() {
+      if (!isCloudReady || !window.FB_SDK || !fbDb) return;
+      try {
+        const syncRef = window.FB_SDK.doc(fbDb, 'cloud_sync', 'singaraja_soccerfield_data');
+        const snap = await window.FB_SDK.getDoc(syncRef);
+
+        if (snap.exists()) {
+          const cloudData = snap.data();
+          let hasUpdates = false;
+
+          if (cloudData.products && Array.isArray(cloudData.products) && cloudData.products.length > 0) {
+            products = cloudData.products;
+            localStorage.setItem(KEY_PRODUCTS, JSON.stringify(products));
+            hasUpdates = true;
+          }
+          if (cloudData.transactions && Array.isArray(cloudData.transactions)) {
+            transactions = cloudData.transactions;
+            localStorage.setItem(KEY_TRANSACTIONS, JSON.stringify(transactions));
+            hasUpdates = true;
+          }
+          if (cloudData.bookings && Array.isArray(cloudData.bookings)) {
+            bookings = cloudData.bookings;
+            localStorage.setItem(KEY_BOOKINGS, JSON.stringify(bookings));
+            hasUpdates = true;
+          }
+          if (cloudData.bons && Array.isArray(cloudData.bons)) {
+            bons = cloudData.bons;
+            localStorage.setItem(KEY_BONS, JSON.stringify(bons));
+            hasUpdates = true;
+          }
+          if (cloudData.expenses && Array.isArray(cloudData.expenses)) {
+            expenses = cloudData.expenses;
+            localStorage.setItem(KEY_EXPENSES, JSON.stringify(expenses));
+            hasUpdates = true;
+          }
+          if (cloudData.attendance && Array.isArray(cloudData.attendance)) {
+            attendance = cloudData.attendance;
+            localStorage.setItem(KEY_ATTENDANCE, JSON.stringify(attendance));
+            hasUpdates = true;
+          }
+          if (cloudData.users && Array.isArray(cloudData.users) && cloudData.users.length > 0) {
+            users = cloudData.users;
+            localStorage.setItem(KEY_USERS, JSON.stringify(users));
+            hasUpdates = true;
+          }
+          if (cloudData.rates) {
+            rentalRates = cloudData.rates;
+            localStorage.setItem(KEY_RATES, JSON.stringify(rentalRates));
+          }
+          if (cloudData.qrisUrl) {
+            customQrisUrl = cloudData.qrisUrl;
+            localStorage.setItem(KEY_QRIS, JSON.stringify(customQrisUrl));
+          }
+
+          if (hasUpdates) {
+            // Render ulang tampilan aktif jika ada pembaruan dari cloud
+            renderDashboard();
+            renderPosCatalog();
+            updateBonBadge();
+          }
+        } else {
+          // Inisialisasi awal ke cloud jika dokumen belum ada
+          await syncAllToFirebaseCloud();
+        }
+      } catch (err) {
+        console.warn('Pull cloud data error:', err);
+      }
+    }
+
+    function triggerAutoCloudSync(key, value) {
+      if (!isCloudReady || !window.FB_SDK || !fbDb) return;
+
+      // Debounce agar tidak melakukan write berlebihan dalam milidetik yang sama
+      clearTimeout(cloudSyncDebounceTimer);
+      updateCloudSyncStatus('SYNCING', 'Menyimpan...');
+
+      cloudSyncDebounceTimer = setTimeout(async () => {
+        try {
+          const syncRef = window.FB_SDK.doc(fbDb, 'cloud_sync', 'singaraja_soccerfield_data');
+          await window.FB_SDK.setDoc(syncRef, {
+            lastSyncAt: new Date().toISOString(),
+            lastSyncKey: key,
+            products: products,
+            transactions: transactions,
+            bookings: bookings,
+            bons: bons,
+            expenses: expenses,
+            attendance: attendance,
+            closings: closings,
+            users: users,
+            rates: rentalRates,
+            qrisUrl: customQrisUrl
+          }, { merge: true });
+
+          updateCloudSyncStatus('ONLINE', 'Cloud Sinkron');
+        } catch (e) {
+          console.warn('Auto cloud sync failed:', e);
+          updateCloudSyncStatus('ERROR', 'Gagal Sync');
+        }
+      }, 1000);
+    }
+
+    // ==========================================
     // INTEGRATION & QRIS OPERATIONS
     // ==========================================
     function renderIntegrationSettings() {
@@ -4630,8 +4939,10 @@ Matur Suksma!`;
       fbAuth = null;
       fbDb = null;
       fbUser = null;
+      isCloudReady = false;
 
-      showToast('Konfigurasi Firebase berhasil disimpan!', 'success');
+      initAutoFirebaseIntegration();
+      showToast('Konfigurasi Firebase berhasil disimpan & sistem otomatis menghubungkan kembali!', 'success');
     }
 
     async function testFirebaseConnection() {
@@ -5032,6 +5343,15 @@ Salam Olahraga & Fairplay!`;
     document.addEventListener('DOMContentLoaded', () => {
       startLiveClock();
       updateBonBadge();
+
+      // Listener kesiapan Firebase SDK untuk inisialisasi otomatis
+      if (window.FB_SDK) {
+        initAutoFirebaseIntegration();
+      } else {
+        window.addEventListener('firebase-sdk-ready', () => {
+          initAutoFirebaseIntegration();
+        });
+      }
 
       // Enter key listener pada form login
       const pwdInput = document.getElementById('loginPassword');
