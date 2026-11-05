@@ -2236,6 +2236,7 @@
     const KEY_WEBHOOK = 'ssf_webhook_v5';
     const KEY_USERS = 'ssf_users_v5';
     const KEY_AUTH_SESSION = 'ssf_active_session_v5';
+    const KEY_ACTIVE_TAB = 'ssf_active_tab_v5';
     const KEY_INVOICE_DATA = 'ssf_invoice_draft_v1';
     const KEY_FIREBASE = 'ssf_firebase_config_v5';
 
@@ -2450,7 +2451,8 @@
       document.getElementById('loginPassword').value = '';
       document.getElementById('loginOverlay').classList.add('hidden');
       applyRolePermissions();
-      switchTab('dashboard');
+      const lastActiveTab = localStorage.getItem(KEY_ACTIVE_TAB) || 'dashboard';
+      switchTab(lastActiveTab);
       showToast(`Selamat datang, ${currentUser.name} (${currentUser.role})!`, 'success');
     }
 
@@ -2468,8 +2470,11 @@
       const errBox = document.getElementById('loginErrorAlert');
       if (errBox) errBox.classList.add('hidden');
       currentUser = null;
-      // Hapus Sesi Login saat logout manual
+      // Hapus Sesi Login dan Tab Aktif saat logout manual
       localStorage.removeItem(KEY_AUTH_SESSION);
+      try {
+        localStorage.removeItem(KEY_ACTIVE_TAB);
+      } catch (e) {}
       document.body.classList.remove('role-kasir-active');
       document.getElementById('loginOverlay').classList.remove('hidden');
       showToast('Anda telah keluar dari sistem.', 'info');
@@ -2569,6 +2574,11 @@
         showToast('Akses dibatasi! Menu ini hanya dapat diakses oleh Administrator.', 'error');
         tabId = 'dashboard';
       }
+
+      // Simpan tab aktif ke localStorage agar tidak reset saat refresh
+      try {
+        localStorage.setItem(KEY_ACTIVE_TAB, tabId);
+      } catch (e) {}
 
       // Sembunyikan semua section
       const allSections = document.querySelectorAll('main > section');
@@ -3278,8 +3288,26 @@ Matur Suksma!`;
       }
     }
 
-    // Suara Notifikasi Pembayaran Berhasil (Chime + Suara Bicara "Pembelian Berhasil")
-    function playPaymentSuccessVoice() {
+    // Fungsi Terbilang Bahasa Indonesia untuk pelafalan total belanja
+    function angkaTerbilang(nilai) {
+      const bilangan = ['', 'satu', 'dua', 'tiga', 'empat', 'lima', 'enam', 'tujuh', 'delapan', 'sembilan', 'sepuluh', 'sebelas'];
+      nilai = Math.floor(Math.abs(Number(nilai) || 0));
+
+      if (nilai === 0) return 'nol';
+      if (nilai < 12) return bilangan[nilai];
+      if (nilai < 20) return angkaTerbilang(nilai - 10) + ' belas';
+      if (nilai < 100) return angkaTerbilang(Math.floor(nilai / 10)) + ' puluh' + (nilai % 10 !== 0 ? ' ' + angkaTerbilang(nilai % 10) : '');
+      if (nilai < 200) return 'seratus' + (nilai - 100 !== 0 ? ' ' + angkaTerbilang(nilai - 100) : '');
+      if (nilai < 1000) return angkaTerbilang(Math.floor(nilai / 100)) + ' ratus' + (nilai % 100 !== 0 ? ' ' + angkaTerbilang(nilai % 100) : '');
+      if (nilai < 2000) return 'seribu' + (nilai - 1000 !== 0 ? ' ' + angkaTerbilang(nilai - 1000) : '');
+      if (nilai < 1000000) return angkaTerbilang(Math.floor(nilai / 1000)) + ' ribu' + (nilai % 1000 !== 0 ? ' ' + angkaTerbilang(nilai % 1000) : '');
+      if (nilai < 1000000000) return angkaTerbilang(Math.floor(nilai / 1000000)) + ' juta' + (nilai % 1000000 !== 0 ? ' ' + angkaTerbilang(nilai % 1000000) : '');
+      if (nilai < 1000000000000) return angkaTerbilang(Math.floor(nilai / 1000000000)) + ' milyar' + (nilai % 1000000000 !== 0 ? ' ' + angkaTerbilang(nilai % 1000000000) : '');
+      return nilai.toString();
+    }
+
+    // Suara Notifikasi Pembayaran Berhasil (Chime + Suara Bicara "Pembelian Berhasil. Total Pembayaran ... Rupiah")
+    function playPaymentSuccessVoice(totalAmount) {
       try {
         // 1. Bunyikan nada jingle sukses (C5 -> E5 -> G5)
         if (!audioCtx) {
@@ -3307,11 +3335,17 @@ Matur Suksma!`;
         console.warn('Jingle playback error:', e);
       }
 
-      // 2. Mainkan suara ucapan bahasa Indonesia "Pembelian berhasil"
+      // 2. Mainkan suara ucapan bahasa Indonesia lengkap dengan nominal belanja
       try {
         if ('speechSynthesis' in window) {
           window.speechSynthesis.cancel(); // Hentikan antrean suara sebelumnya
-          const utterance = new SpeechSynthesisUtterance("Pembelian berhasil");
+          
+          let kalimat = "Pembelian berhasil.";
+          if (totalAmount && Number(totalAmount) > 0) {
+            kalimat += " Total pembayaran " + angkaTerbilang(totalAmount) + " rupiah.";
+          }
+
+          const utterance = new SpeechSynthesisUtterance(kalimat);
           utterance.lang = 'id-ID';
           utterance.rate = 1.0;
           utterance.pitch = 1.05;
@@ -3324,7 +3358,7 @@ Matur Suksma!`;
             utterance.voice = idVoice;
           }
 
-          // Sedikit jeda 120ms agar selaras setelah jingle pertama
+          // Jeda 120ms agar selaras setelah jingle nada pertama selesai
           setTimeout(() => {
             window.speechSynthesis.speak(utterance);
           }, 120);
@@ -3567,7 +3601,7 @@ Matur Suksma!`;
       document.getElementById('succTotalAmount').innerText = formatRupiah(trx.total);
       document.getElementById('succPaymentMethod').innerText = trx.method;
       openModal('paymentSuccessModal');
-      playPaymentSuccessVoice();
+      playPaymentSuccessVoice(trx.total);
 
       // Trigger Webhook sync
       syncSaleToWebhook(trx);
@@ -5700,9 +5734,12 @@ Salam Olahraga & Fairplay!`;
           currentUser = savedSession;
           document.getElementById('loginOverlay').classList.add('hidden');
           applyRolePermissions();
-          switchTab('dashboard');
+          // Buka menu/tab terakhir yang sedang aktif sebelum di-refresh
+          const lastActiveTab = localStorage.getItem(KEY_ACTIVE_TAB) || 'dashboard';
+          switchTab(lastActiveTab);
         } else {
           localStorage.removeItem(KEY_AUTH_SESSION);
+          try { localStorage.removeItem(KEY_ACTIVE_TAB); } catch (e) {}
           renderDashboard();
           renderPosCatalog();
         }
