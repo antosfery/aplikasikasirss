@@ -710,6 +710,10 @@
             <p class="text-xs text-slate-400 mt-1">Rekap data penjualan kafetaria & transaksi POS berdasarkan rentang tanggal dan petugas kasir.</p>
           </div>
           <div class="flex flex-wrap items-center gap-2">
+            <button onclick="openSalesTodayWhatsAppModal()" class="px-3.5 py-2.5 bg-teal-600 hover:bg-teal-500 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-md shadow-teal-600/20">
+              <i data-lucide="share-2" class="w-4 h-4"></i>
+              <span>Kirim Laporan WA Hari Ini</span>
+            </button>
             <button onclick="exportFilteredSalesToExcel()" class="px-3.5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm">
               <i data-lucide="file-spreadsheet" class="w-4 h-4 text-emerald-400"></i>
               <span>Export Excel (.xlsx)</span>
@@ -2113,6 +2117,40 @@
     </div>
   </div>
 
+  <!-- MODAL: LAPORAN PENJUALAN KASIR HARI INI VIA WHATSAPP -->
+  <div id="salesTodayWhatsAppModal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4 hidden">
+    <div class="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-lg p-6 shadow-2xl space-y-4">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <div class="flex items-center gap-2">
+          <div class="w-8 h-8 rounded-xl bg-teal-500/10 text-teal-400 flex items-center justify-center">
+            <i data-lucide="share-2" class="w-4 h-4"></i>
+          </div>
+          <div>
+            <h3 class="font-bold text-white text-base">Laporan Penjualan Hari Ini (WhatsApp)</h3>
+            <p class="text-[11px] text-slate-400">Rincian barang terlaris dari jumlah terbanyak ke terkecil</p>
+          </div>
+        </div>
+        <button onclick="closeModal('salesTodayWhatsAppModal')" class="text-slate-400 hover:text-white">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div class="space-y-2 text-xs">
+        <label class="text-slate-400">Pratinjau Pesan WhatsApp:</label>
+        <textarea id="salesTodayWaText" rows="12" readonly class="w-full bg-slate-950 border border-slate-800 rounded-2xl p-3 text-white font-mono text-[11px] focus:outline-none"></textarea>
+      </div>
+
+      <div class="flex gap-2">
+        <button onclick="copySalesTodayWaText()" class="w-1/2 py-3 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5">
+          <i data-lucide="copy" class="w-4 h-4"></i> Salin Teks
+        </button>
+        <button onclick="sendSalesTodayWaDirect()" class="w-1/2 py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-lg shadow-emerald-600/20">
+          <i data-lucide="send" class="w-4 h-4"></i> Buka WhatsApp
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- PRINT RECEIPT CONTAINER (FORMAT KHUSUS 58MM THERMAL PRINTER) -->
   <div id="printArea" class="hidden">
     <div style="text-align: center; margin-bottom: 6px;">
@@ -3187,6 +3225,7 @@ Matur Suksma!`;
       // Hapus data transaksi dari list
       transactions.splice(trxIndex, 1);
       setStored(KEY_TRANSACTIONS, transactions);
+      immediateCloudSync(); // Sinkronisasi instan ke Cloud agar permanen
 
       // Refresh seluruh tampilan data terkait
       renderFilteredSalesReport();
@@ -3890,6 +3929,7 @@ Matur Suksma!`;
 
       bons.splice(bonIndex, 1);
       setStored(KEY_BONS, bons);
+      immediateCloudSync(); // Sinkronisasi instan ke Cloud agar permanen
 
       renderBonTable();
       updateBonBadge();
@@ -4347,6 +4387,7 @@ Matur Suksma!`;
       }
       bookings = bookings.filter(b => b.bookingId !== bId);
       setStored(KEY_BOOKINGS, bookings);
+      immediateCloudSync(); // Sinkronisasi instan ke Cloud agar permanen
       renderBookingList();
       showToast('Booking berhasil dihapus.', 'info');
     }
@@ -4448,6 +4489,7 @@ Matur Suksma!`;
       }
       expenses = expenses.filter(e => e.id !== expId);
       setStored(KEY_EXPENSES, expenses);
+      immediateCloudSync(); // Sinkronisasi instan ke Cloud agar permanen
       renderExpenseTable();
       showToast('Pengeluaran berhasil dihapus.', 'info');
     }
@@ -4541,6 +4583,7 @@ Matur Suksma!`;
       const targetAtt = attendance[attIndex];
       attendance.splice(attIndex, 1);
       setStored(KEY_ATTENDANCE, attendance);
+      immediateCloudSync(); // Sinkronisasi instan ke Cloud agar permanen
 
       renderAttendancePage();
       showToast(`Data absensi ${targetAtt.employeeName} (${targetAtt.date}) berhasil dihapus!`, 'success');
@@ -4786,6 +4829,7 @@ Matur Suksma!`;
 
       closings.splice(closingIndex, 1);
       setStored(KEY_CLOSINGS, closings);
+      immediateCloudSync(); // Sinkronisasi instan ke Cloud agar permanen
       renderClosingHistory();
       showToast(`Catatan tutup kasir (${target.date}) berhasil dihapus.`, 'success');
     }
@@ -5287,6 +5331,30 @@ Matur Suksma!`;
       }
     }
 
+    // Fungsi untuk langsung melakukan sinkronisasi instan ke Firebase Cloud tanpa menunggu debounce
+    async function immediateCloudSync() {
+      if (!isCloudReady || !window.FB_SDK || !fbDb) return;
+      try {
+        const syncRef = window.FB_SDK.doc(fbDb, 'cloud_sync', 'singaraja_soccerfield_data');
+        await window.FB_SDK.setDoc(syncRef, {
+          lastSyncAt: new Date().toISOString(),
+          products: products,
+          transactions: transactions,
+          bookings: bookings,
+          bons: bons,
+          expenses: expenses,
+          attendance: attendance,
+          closings: closings,
+          users: users,
+          rates: rentalRates,
+          qrisUrl: customQrisUrl,
+          webhookUrl: savedWebhookUrl || getStored(KEY_WEBHOOK, '')
+        }, { merge: true });
+      } catch (e) {
+        console.warn('Immediate cloud sync error:', e);
+      }
+    }
+
     function triggerAutoCloudSync(key, value) {
       if (!isCloudReady || !window.FB_SDK || !fbDb) return;
 
@@ -5738,6 +5806,109 @@ Salam Olahraga & Fairplay!`;
 
     function sendToWhatsappDirect() {
       const text = document.getElementById('waRecapText')?.value;
+      if (!text) return;
+      const url = `https://wa.me/6285137770828?text=${encodeURIComponent(text)}`;
+      window.open(url, '_blank');
+    }
+
+    // ==========================================
+    // LAPORAN PENJUALAN KASIR HARI INI VIA WHATSAPP (TERBANYAK -> TERKECIL)
+    // ==========================================
+    function openSalesTodayWhatsAppModal() {
+      const todayStr = getLocalDateString(new Date());
+      const isKasir = currentUser && currentUser.role === 'Kasir';
+
+      // Ambil transaksi hari ini
+      const todayTrx = transactions.filter(t => {
+        const matchesDate = getLocalDateString(t.date) === todayStr;
+        if (!matchesDate) return false;
+        if (isKasir && currentUser) {
+          return (t.cashier || '').toLowerCase() === currentUser.name.toLowerCase();
+        }
+        return true;
+      });
+
+      if (todayTrx.length === 0) {
+        showToast('Belum ada transaksi penjualan kasir pada hari ini!', 'info');
+        return;
+      }
+
+      // Agregasi jumlah laku dan subtotal per item barang
+      const itemMap = {};
+      let totalQty = 0;
+      let totalOmset = 0;
+      let cashTotal = 0;
+      let qrisTotal = 0;
+
+      todayTrx.forEach(t => {
+        const val = Number(t.total || 0);
+        totalOmset += val;
+        if (t.method === 'CASH') cashTotal += val;
+        if (t.method === 'QRIS') qrisTotal += val;
+
+        if (Array.isArray(t.items)) {
+          t.items.forEach(it => {
+            const name = it.name || 'Barang';
+            const qty = Number(it.qty || 0);
+            const price = Number(it.price || 0);
+            if (!itemMap[name]) {
+              itemMap[name] = { qty: 0, subtotal: 0 };
+            }
+            itemMap[name].qty += qty;
+            itemMap[name].subtotal += (qty * price);
+            totalQty += qty;
+          });
+        }
+      });
+
+      // Urutkan barang dari yang paling banyak laku (terbanyak -> terkecil)
+      const sortedItems = Object.keys(itemMap).map(name => ({
+        name: name,
+        qty: itemMap[name].qty,
+        subtotal: itemMap[name].subtotal
+      })).sort((a, b) => b.qty - a.qty || b.subtotal - a.subtotal);
+
+      // Susun daftar teks berurutan
+      let itemsListText = '';
+      sortedItems.forEach((it, idx) => {
+        itemsListText += `${idx + 1}. *${it.name}* : ${it.qty} pcs (${formatRupiah(it.subtotal)})\n`;
+      });
+
+      const petugasLabel = isKasir ? `${currentUser.name} (Kasir Shift)` : 'Semua Kasir';
+
+      const message = `*LAPORAN PENJUALAN KASIR HARI INI*\n` +
+`*SINGARAJA SOCCERFIELD*\n` +
+`------------------------------------------\n` +
+`📅 Tanggal: ${todayStr}\n` +
+`👤 Petugas: ${petugasLabel}\n` +
+`🧾 Total Transaksi: ${todayTrx.length} Nota\n\n` +
+`*RINGKASAN ITEM TERJUAL (TERBANYAK -> TERKECIL):*\n` +
+`${itemsListText}\n` +
+`*Total Kuantitas:* ${totalQty} pcs\n` +
+`------------------------------------------\n` +
+`*RINGKASAN PEMBAYARAN:*\n` +
+`- Cash (Tunai) : ${formatRupiah(cashTotal)}\n` +
+`- QRIS         : ${formatRupiah(qrisTotal)}\n` +
+`*TOTAL OMSET   : ${formatRupiah(totalOmset)}*\n` +
+`------------------------------------------\n` +
+`Matur Suksma & Salam Fairplay!`;
+
+      document.getElementById('salesTodayWaText').value = message;
+      openModal('salesTodayWhatsAppModal');
+    }
+
+    function copySalesTodayWaText() {
+      const text = document.getElementById('salesTodayWaText')?.value;
+      if (!text) return;
+      navigator.clipboard.writeText(text).then(() => {
+        showToast('Laporan penjualan hari ini berhasil disalin!', 'success');
+      }).catch(() => {
+        showToast('Gagal menyalin teks.', 'error');
+      });
+    }
+
+    function sendSalesTodayWaDirect() {
+      const text = document.getElementById('salesTodayWaText')?.value;
       if (!text) return;
       const url = `https://wa.me/6285137770828?text=${encodeURIComponent(text)}`;
       window.open(url, '_blank');
