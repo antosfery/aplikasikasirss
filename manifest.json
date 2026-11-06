@@ -1,8 +1,8 @@
 {
   "id": "./index.html",
-  "name": "Singaraja Soccerfield - Management & POS System",
+  "name": "Singaraja Soccerfield - Management &amp; POS System",
   "short_name": "SSF POS",
-  "description": "Sistem Kasir POS, Booking Lapangan & Operasional Singaraja Soccerfield",
+  "description": "Sistem Kasir POS, Booking Lapangan &amp; Operasional Singaraja Soccerfield",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
@@ -48,7 +48,7 @@
       "sizes": "720x1280",
       "type": "image/png",
       "form_factor": "narrow",
-      "label": "Kasir POS & Operasional Mobile Singaraja Soccerfield"
+      "label": "Kasir POS &amp; Operasional Mobile Singaraja Soccerfield"
     },
     {
       "src": "screenshot-wide.png",
