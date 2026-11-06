@@ -21,6 +21,9 @@
   
   <!-- SheetJS for Excel Import/Export -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+  <!-- jsQR untuk Ekstraksi Otomatis QRIS Statis GoPay Merchant ke QRIS Dinamis -->
+  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
   
   <!-- Firebase Modular Web SDK v11.6.1 (Official CDN) -->
   <script type="module">
@@ -1480,16 +1483,19 @@
 
         <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
           
-          <!-- KARTU 1: SETTING GAMBAR QRIS PEMBAYARAN -->
+          <!-- KARTU 1: SETTING GAMBAR QRIS & GOPAY MERCHANT DINAMIS -->
           <div class="lg:col-span-5 bg-slate-900 border border-slate-800 p-5 sm:p-6 rounded-3xl space-y-4">
-            <div class="flex items-center gap-2 border-b border-slate-800 pb-3">
-              <div class="w-8 h-8 rounded-xl bg-teal-500/10 text-teal-400 flex items-center justify-center">
-                <i data-lucide="qr-code" class="w-4 h-4"></i>
+            <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div class="flex items-center gap-2">
+                <div class="w-8 h-8 rounded-xl bg-teal-500/10 text-teal-400 flex items-center justify-center">
+                  <i data-lucide="qr-code" class="w-4 h-4"></i>
+                </div>
+                <div>
+                  <h3 class="font-bold text-white text-sm sm:text-base">QRIS Dinamis GoPay Merchant</h3>
+                  <p class="text-[11px] text-slate-400">Otomatis buat QRIS sesuai nominal belanja</p>
+                </div>
               </div>
-              <div>
-                <h3 class="font-bold text-white text-sm sm:text-base">Setting Gambar QRIS Kasir</h3>
-                <p class="text-[11px] text-slate-400">QRIS ini akan tampil pada pop-up pembayaran kasir</p>
-              </div>
+              <span id="qrisDynamicStatusBadge" class="px-2.5 py-1 rounded-full text-[10px] font-black uppercase bg-slate-800 text-slate-400 border border-slate-700">STATIS</span>
             </div>
 
             <!-- Preview Display -->
@@ -1497,14 +1503,26 @@
               <div class="w-48 h-48 sm:w-56 sm:h-56 bg-white p-2.5 rounded-2xl flex items-center justify-center shadow-inner overflow-hidden">
                 <img id="qrisSettingsPreviewImg" src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=SINGARAJA_SOCCERFIELD_QRIS" alt="QRIS Preview" class="w-full h-full object-contain">
               </div>
-              <span class="text-[10px] text-slate-500 font-mono mt-2">Format: JPG, PNG, atau WebP</span>
+              <span id="qrisMerchantNameLabel" class="text-xs font-bold text-emerald-400 mt-2.5 text-center">Singaraja Soccerfield</span>
+              <span class="text-[10px] text-slate-500 font-mono mt-0.5 text-center">Upload gambar QRIS GoPay Merchant (GoBiz) Anda agar sistem otomatis mengubahnya menjadi QRIS Dinamis</span>
+            </div>
+
+            <!-- Input Manual / Hasil Ekstraksi Payload EMVCo QRIS -->
+            <div class="space-y-1.5 text-xs">
+              <label class="text-slate-400 block font-semibold">Data String EMVCo QRIS GoPay Merchant:</label>
+              <div class="flex gap-2">
+                <input type="text" id="qrisRawPayloadInput" placeholder="00020101021126... (Terisi otomatis saat upload foto QRIS)" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-mono text-[11px] focus:outline-none focus:border-teal-500">
+                <button type="button" onclick="saveManualQrisPayload()" class="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-teal-400 font-bold rounded-xl text-xs whitespace-nowrap border border-slate-700">
+                  Simpan Kode
+                </button>
+              </div>
             </div>
 
             <!-- Upload Controls -->
             <div class="space-y-2">
               <label class="w-full py-3 px-4 bg-teal-600 hover:bg-teal-500 text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-teal-600/20">
                 <i data-lucide="upload" class="w-4 h-4"></i>
-                <span>Upload Foto / Barcode QRIS Baru</span>
+                <span>Upload Foto QRIS GoPay Merchant (Auto-Dinamis)</span>
                 <input type="file" id="qrisUploadInput" accept="image/*" onchange="handleUploadQrisImage(event)" class="hidden">
               </label>
 
@@ -1648,13 +1666,28 @@
   <!-- 3. MODALS SYSTEM -->
   <!-- ========================================== -->
 
-  <!-- MODAL: PEMBAYARAN KASIR (CASH & QRIS) -->
+  <!-- MODAL: PEMBAYARAN KASIR & PELUNASAN BON (CASH & QRIS DINAMIS GOPAY) -->
   <div id="paymentModal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-3 sm:p-4 hidden overflow-y-auto">
     <div class="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-sm sm:max-w-md p-5 sm:p-6 shadow-2xl space-y-4 my-auto">
       <div class="flex items-center justify-between border-b border-slate-800 pb-3">
-        <h3 id="payModalTitle" class="font-bold text-white text-base">Pembayaran Kasir</h3>
+        <div>
+          <h3 id="payModalTitle" class="font-bold text-white text-base">Pembayaran Kasir</h3>
+          <p id="payModalSubtitle" class="text-[11px] text-slate-400">Pilih metode pembayaran Tunai atau QRIS</p>
+        </div>
         <button onclick="closeModal('paymentModal')" class="text-slate-400 hover:text-white p-1">
           <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <!-- Tombol Pilihan Metode Pembayaran (Muncul untuk Kasir POS maupun Lunasi Bon) -->
+      <div class="grid grid-cols-2 gap-2 p-1 bg-slate-950 rounded-2xl border border-slate-800">
+        <button type="button" id="btnSwitchPayCash" onclick="switchPaymentModalMethod('CASH')" class="py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all bg-emerald-600 text-white shadow">
+          <i data-lucide="banknote" class="w-4 h-4"></i>
+          <span>Tunai (Cash)</span>
+        </button>
+        <button type="button" id="btnSwitchPayQris" onclick="switchPaymentModalMethod('QRIS')" class="py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all text-slate-400 hover:text-white">
+          <i data-lucide="qr-code" class="w-4 h-4"></i>
+          <span>QRIS Dinamis</span>
         </button>
       </div>
 
@@ -1684,20 +1717,26 @@
         </div>
       </div>
 
-      <!-- TAMPILAN PEMBAYARAN QRIS DINAMIS -->
+      <!-- TAMPILAN PEMBAYARAN QRIS DINAMIS GOPAY MERCHANT -->
       <div id="payQrisView" class="space-y-3 text-xs hidden">
         <div class="flex flex-col items-center justify-center p-4 bg-slate-950 border border-slate-800/80 rounded-2xl">
-          <div class="w-48 h-48 bg-white p-2 rounded-xl flex items-center justify-center overflow-hidden shadow-inner">
-            <img id="activeQrisImageDisplay" src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=SINGARAJA_SOCCERFIELD_QRIS" alt="QRIS Pembayaran" class="w-full h-full object-contain">
+          <div class="flex items-center gap-1.5 mb-2">
+            <span id="payQrisTypeBadge" class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-teal-500/20 text-teal-300 border border-teal-500/30">
+              QRIS DINAMIS GOPAY MERCHANT
+            </span>
           </div>
-          <p class="text-[11px] text-slate-400 mt-2 text-center">Silakan scan kode QRIS di atas melalui BCA, BRI, BNI, Mandiri, GoPay, OVO, Dana, atau ShopeePay.</p>
+          <div class="w-52 h-52 bg-white p-2.5 rounded-2xl flex items-center justify-center overflow-hidden shadow-inner relative">
+            <img id="activeQrisImageDisplay" src="https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=SINGARAJA_SOCCERFIELD_QRIS" alt="QRIS Pembayaran" class="w-full h-full object-contain">
+          </div>
+          <p id="payQrisMerchantLabel" class="text-xs font-black text-white mt-2.5">SINGARAJA SOCCERFIELD</p>
+          <p id="payQrisAmountHint" class="text-[11px] text-emerald-400 font-mono font-bold mt-0.5">Nominal Otomatis: Rp 0</p>
+          <p class="text-[11px] text-slate-400 mt-1.5 text-center leading-relaxed">Scan melalui GoPay, BCA, BRI, BNI, Mandiri, OVO, Dana, atau ShopeePay. Nominal tagihan akan otomatis terisi.</p>
         </div>
-        <p class="text-[10px] text-center text-teal-400 font-medium">Pastikan nominal transfer sesuai dengan total tagihan kasir sebelum menyelesaikan transaksi.</p>
       </div>
 
       <button onclick="completePayment()" class="w-full py-3.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-emerald-600/20 flex items-center justify-center gap-2">
         <i data-lucide="check" class="w-4 h-4"></i>
-        <span>Selesaikan Transaksi</span>
+        <span id="btnCompletePaymentText">Selesaikan Transaksi</span>
       </button>
     </div>
   </div>
@@ -2519,7 +2558,10 @@
     let employees = getStored(KEY_EMPLOYEES, defaultEmployees);
     let closings = getStored(KEY_CLOSINGS, []);
     let rentalRates = getStored(KEY_RATES, defaultRates);
+    const KEY_QRIS_PAYLOAD = 'ssf_qris_raw_payload_v5';
     let customQrisUrl = getStored(KEY_QRIS, DEFAULT_QRIS);
+    let customQrisPayload = getStored(KEY_QRIS_PAYLOAD, '');
+    let settlingBonTargetId = null;
     let savedWebhookUrl = getStored(KEY_WEBHOOK, '');
     let firebaseConfig = getStored(KEY_FIREBASE, OFFICIAL_FIREBASE_CONFIG);
 
@@ -2621,9 +2663,17 @@
         return;
       }
 
-      // Validasi dan cari akun di Database Pengguna
+      // Pastikan daftar akun pengguna selalu valid (fallback ke defaultUsers jika kosong/corrupt)
+      if (!Array.isArray(users) || users.length === 0) {
+        users = [...defaultUsers];
+      }
+
+      // Validasi dan cari akun di Database Pengguna (cek juga defaultUsers jika belum tersinkron)
       const foundUser = users.find(u => 
-        u.username.toLowerCase() === usernameInput.toLowerCase() && 
+        u && u.username && u.username.toLowerCase() === usernameInput.toLowerCase() && 
+        String(u.password) === String(passwordInput)
+      ) || defaultUsers.find(u =>
+        u.username.toLowerCase() === usernameInput.toLowerCase() &&
         String(u.password) === String(passwordInput)
       );
 
@@ -3700,36 +3750,193 @@ Matur Suksma!`;
     }
 
     // ==========================================
-    // PAYMENT MODAL & CHECKOUT
+    // GENERATOR QRIS DINAMIS EMVCo (GOPAY MERCHANT / QRIS NASIONAL)
     // ==========================================
-    function openPaymentModal(method) {
-      if (cart.length === 0) {
+    function calculateCRC16CCITT(str) {
+      let crc = 0xFFFF;
+      for (let i = 0; i < str.length; i++) {
+        crc ^= str.charCodeAt(i) << 8;
+        for (let j = 0; j < 8; j++) {
+          if ((crc & 0x8000) !== 0) {
+            crc = ((crc << 1) ^ 0x1021) & 0xFFFF;
+          } else {
+            crc = (crc << 1) & 0xFFFF;
+          }
+        }
+      }
+      return crc.toString(16).toUpperCase().padStart(4, '0');
+    }
+
+    function parseQrisMerchantName(rawQris) {
+      if (!rawQris || !rawQris.startsWith('000201')) return '';
+      let i = 0;
+      while (i < rawQris.length) {
+        const tag = rawQris.substr(i, 2);
+        const len = parseInt(rawQris.substr(i + 2, 2), 10);
+        if (isNaN(len) || len < 0 || i + 4 + len > rawQris.length) break;
+        const val = rawQris.substr(i + 4, len);
+        if (tag === '59') return val;
+        i += 4 + len;
+      }
+      return 'GoPay Merchant';
+    }
+
+    function generateDynamicQrisPayload(staticPayload, amount) {
+      const cleanPayload = String(staticPayload || '').trim();
+      if (!cleanPayload.startsWith('000201')) return null;
+
+      const nominal = Math.round(Number(amount || 0));
+      if (nominal <= 0) return cleanPayload;
+
+      const amtStr = String(nominal);
+      const tag54 = '54' + String(amtStr.length).padStart(2, '0') + amtStr;
+
+      let i = 0;
+      let rebuilt = '';
+      let inserted54 = false;
+
+      while (i < cleanPayload.length) {
+        const tag = cleanPayload.substr(i, 2);
+        const lenStr = cleanPayload.substr(i + 2, 2);
+        const len = parseInt(lenStr, 10);
+
+        if (isNaN(len) || len < 0 || i + 4 + len > cleanPayload.length) break;
+        const val = cleanPayload.substr(i + 4, len);
+
+        if (tag === '63') {
+          break;
+        } else if (tag === '01') {
+          rebuilt += '010212';
+        } else if (tag === '54') {
+          // Lewati tag 54 lama jika ada
+        } else {
+          if (tag === '58' && !inserted54) {
+            rebuilt += tag54;
+            inserted54 = true;
+          }
+          rebuilt += tag + lenStr + val;
+          if (tag === '53' && !inserted54) {
+            rebuilt += tag54;
+            inserted54 = true;
+          }
+        }
+        i += 4 + len;
+      }
+
+      if (!inserted54) {
+        rebuilt += tag54;
+      }
+
+      const payloadWithCrcHeader = rebuilt + '6304';
+      const newCrc = calculateCRC16CCITT(payloadWithCrcHeader);
+      return payloadWithCrcHeader + newCrc;
+    }
+
+    // ==========================================
+    // PAYMENT MODAL & CHECKOUT (POS & PELUNASAN BON)
+    // ==========================================
+    function getActivePaymentTotal() {
+      if (settlingBonTargetId) {
+        const targetBon = bons.find(b => b.id === settlingBonTargetId);
+        return targetBon ? Number(targetBon.total || 0) : 0;
+      }
+      return getCartTotal();
+    }
+
+    function openPaymentModal(method, bonIdToSettle = null) {
+      settlingBonTargetId = bonIdToSettle;
+
+      if (!settlingBonTargetId && cart.length === 0) {
         showToast('Keranjang masih kosong!', 'error');
         return;
       }
 
-      activePaymentMethod = method;
-      const total = getCartTotal();
-      document.getElementById('payModalTotalText').innerText = formatRupiah(total);
-      document.getElementById('payModalTitle').innerText = method === 'CASH' ? 'Pembayaran Tunai (Cash)' : 'Pembayaran QRIS';
+      const total = getActivePaymentTotal();
+      if (total <= 0) return;
 
+      const subtitleEl = document.getElementById('payModalSubtitle');
+      const btnTextEl = document.getElementById('btnCompletePaymentText');
+
+      if (settlingBonTargetId) {
+        const targetBon = bons.find(b => b.id === settlingBonTargetId);
+        const playerName = targetBon ? targetBon.playerName : 'Pemain';
+        if (subtitleEl) subtitleEl.innerText = `Pelunasan Bon: ${playerName}`;
+        if (btnTextEl) btnTextEl.innerText = 'Konfirmasi Pelunasan Bon';
+      } else {
+        if (subtitleEl) subtitleEl.innerText = 'Transaksi Kasir / POS Kafetaria';
+        if (btnTextEl) btnTextEl.innerText = 'Selesaikan Transaksi';
+      }
+
+      document.getElementById('payModalTotalText').innerText = formatRupiah(total);
+      switchPaymentModalMethod(method || 'CASH');
+      openModal('paymentModal');
+      try { lucide.createIcons(); } catch (e) {}
+    }
+
+    function switchPaymentModalMethod(method) {
+      activePaymentMethod = method;
+      const total = getActivePaymentTotal();
+
+      const btnCash = document.getElementById('btnSwitchPayCash');
+      const btnQris = document.getElementById('btnSwitchPayQris');
       const cashView = document.getElementById('payCashView');
       const qrisView = document.getElementById('payQrisView');
 
       if (method === 'CASH') {
+        document.getElementById('payModalTitle').innerText = settlingBonTargetId
+          ? 'Pelunasan Bon - Tunai (Cash)'
+          : 'Pembayaran Tunai (Cash)';
+
+        if (btnCash) btnCash.className = 'py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all bg-emerald-600 text-white shadow';
+        if (btnQris) btnQris.className = 'py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all text-slate-400 hover:text-white';
+
         cashView.classList.remove('hidden');
         qrisView.classList.add('hidden');
         document.getElementById('payCashReceived').value = total;
         calculateChange();
         renderQuickAmounts(total);
       } else {
+        document.getElementById('payModalTitle').innerText = settlingBonTargetId
+          ? 'Pelunasan Bon - QRIS Dinamis'
+          : 'Pembayaran QRIS Dinamis';
+
+        if (btnQris) btnQris.className = 'py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all bg-teal-600 text-white shadow';
+        if (btnCash) btnCash.className = 'py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all text-slate-400 hover:text-white';
+
         cashView.classList.add('hidden');
         qrisView.classList.remove('hidden');
-        const qrisImg = document.getElementById('activeQrisImageDisplay');
-        if (qrisImg) qrisImg.src = customQrisUrl || DEFAULT_QRIS;
+        renderActiveQrisCode(total);
       }
+    }
 
-      openModal('paymentModal');
+    function renderActiveQrisCode(total) {
+      const qrisImg = document.getElementById('activeQrisImageDisplay');
+      const typeBadge = document.getElementById('payQrisTypeBadge');
+      const merchLabel = document.getElementById('payQrisMerchantLabel');
+      const amountHint = document.getElementById('payQrisAmountHint');
+
+      const rawPayload = customQrisPayload || getStored(KEY_QRIS_PAYLOAD, '');
+      if (rawPayload && rawPayload.startsWith('000201')) {
+        const dynamicPayload = generateDynamicQrisPayload(rawPayload, total);
+        const merchantName = parseQrisMerchantName(rawPayload) || 'SINGARAJA SOCCERFIELD';
+        if (qrisImg) {
+          qrisImg.src = 'https://api.qrserver.com/v1/create-qr-code/?size=300x300&margin=6&data=' + encodeURIComponent(dynamicPayload);
+        }
+        if (typeBadge) {
+          typeBadge.innerText = '⚡ QRIS DINAMIS GOPAY MERCHANT';
+          typeBadge.className = 'px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-emerald-500/20 text-emerald-300 border border-emerald-500/30';
+        }
+        if (merchLabel) merchLabel.innerText = merchantName;
+        if (amountHint) amountHint.innerText = `Nominal Otomatis Terisi: ${formatRupiah(total)}`;
+      } else {
+        if (qrisImg) qrisImg.src = customQrisUrl || DEFAULT_QRIS;
+        if (typeBadge) {
+          typeBadge.innerText = 'QRIS STATIS (MANUAL NOMINAL)';
+          typeBadge.className = 'px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-amber-500/20 text-amber-300 border border-amber-500/30';
+        }
+        if (merchLabel) merchLabel.innerText = 'SINGARAJA SOCCERFIELD';
+        if (amountHint) amountHint.innerText = `Tagihan: ${formatRupiah(total)} (Upload QRIS GoPay di Integrasi utk Auto-Dinamis)`;
+      }
     }
 
     function renderQuickAmounts(total) {
@@ -3764,7 +3971,7 @@ Matur Suksma!`;
     }
 
     function calculateChange() {
-      const total = getCartTotal();
+      const total = getActivePaymentTotal();
       const received = Number(document.getElementById('payCashReceived')?.value || 0);
       const change = received - total;
       const textEl = document.getElementById('payChangeText');
@@ -3781,7 +3988,7 @@ Matur Suksma!`;
     }
 
     function completePayment() {
-      const total = getCartTotal();
+      const total = getActivePaymentTotal();
       if (total <= 0) return;
 
       let received = total;
@@ -3793,7 +4000,56 @@ Matur Suksma!`;
         }
       }
 
-      // Deduct product stocks
+      // JIKA INI ADALAH PELUNASAN BON SEMENTARA
+      if (settlingBonTargetId) {
+        const bon = bons.find(b => b.id === settlingBonTargetId);
+        if (!bon) {
+          settlingBonTargetId = null;
+          closeModal('paymentModal');
+          return;
+        }
+
+        bon.status = 'LUNAS';
+        bon.settledAt = new Date().toISOString();
+        bon.paymentMethod = activePaymentMethod;
+        setStored(KEY_BONS, bons);
+
+        const trx = {
+          id: 'TRX-' + Date.now().toString().slice(-6),
+          receiptNo: 'BON-LUNAS-' + bon.id,
+          date: new Date().toISOString(),
+          cashier: currentUser ? currentUser.name : 'Kasir',
+          items: bon.items || [],
+          total: bon.total,
+          method: activePaymentMethod,
+          cashReceived: received,
+          change: received - total,
+          notes: `Pelunasan Bon (${activePaymentMethod}): ${bon.playerName}`
+        };
+
+        transactions.push(trx);
+        setStored(KEY_TRANSACTIONS, transactions);
+        lastCompletedTransaction = trx;
+        settlingBonTargetId = null;
+
+        closeModal('paymentModal');
+        renderBonTable();
+        updateBonBadge();
+        renderDashboard();
+
+        document.getElementById('succReceiptNo').innerText = trx.receiptNo;
+        document.getElementById('succTotalAmount').innerText = formatRupiah(trx.total);
+        document.getElementById('succPaymentMethod').innerText = trx.method + ' (Pelunasan Bon)';
+        refreshBtStatusUI();
+        openModal('paymentSuccessModal');
+        playPaymentSuccessVoice(trx.total);
+
+        syncSaleToWebhook(trx);
+        showToast(`Bon ${bon.playerName} berhasil dilunasi via ${activePaymentMethod}!`, 'success');
+        return;
+      }
+
+      // JIKA INI ADALAH TRANSAKSI KASIR POS REGULER
       cart.forEach(item => {
         const prod = products.find(p => p.id === item.id);
         if (prod) {
@@ -3802,7 +4058,6 @@ Matur Suksma!`;
       });
       setStored(KEY_PRODUCTS, products);
 
-      // Create Transaction
       const trx = {
         id: 'TRX-' + Date.now().toString().slice(-6),
         receiptNo: 'INV-' + Date.now().toString().slice(-6),
@@ -3819,12 +4074,10 @@ Matur Suksma!`;
       setStored(KEY_TRANSACTIONS, transactions);
       lastCompletedTransaction = trx;
 
-      // Reset and Close
       closeModal('paymentModal');
       clearCart();
       renderPosCatalog();
 
-      // Show Confirmation Dialog & Mainkan Suara "Pembelian Berhasil"
       document.getElementById('succReceiptNo').innerText = trx.receiptNo;
       document.getElementById('succTotalAmount').innerText = formatRupiah(trx.total);
       document.getElementById('succPaymentMethod').innerText = trx.method;
@@ -3832,7 +4085,6 @@ Matur Suksma!`;
       openModal('paymentSuccessModal');
       playPaymentSuccessVoice(trx.total);
 
-      // Trigger Webhook sync
       syncSaleToWebhook(trx);
       showToast('Transaksi pembayaran berhasil!', 'success');
     }
@@ -4477,14 +4729,19 @@ Matur Suksma!`;
             <td class="p-4 font-mono font-bold text-amber-400 whitespace-nowrap">${formatRupiah(b.total)}</td>
             <td class="p-4 whitespace-nowrap">
               <span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${b.status === 'LUNAS' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'}">
-                ${b.status === 'LUNAS' ? 'LUNAS' : 'BELUM LUNAS'}
+                ${b.status === 'LUNAS' ? ('LUNAS (' + (b.paymentMethod || 'CASH') + ')') : 'BELUM LUNAS'}
               </span>
             </td>
             <td class="p-4 text-center whitespace-nowrap">
               <div class="flex items-center justify-center gap-1.5">
                 ${b.status !== 'LUNAS' ? `
-                  <button onclick="settleBon('${b.id}')" class="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold transition-all shadow-sm">
-                    Lunasi
+                  <button type="button" onclick="settleBon('${b.id}', 'CASH')" title="Lunasi Bon dengan Tunai (Cash)" class="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold transition-all shadow-sm inline-flex items-center gap-1">
+                    <i data-lucide="banknote" class="w-3 h-3"></i>
+                    <span>Cash</span>
+                  </button>
+                  <button type="button" onclick="settleBon('${b.id}', 'QRIS')" title="Lunasi Bon dengan QRIS Dinamis" class="px-2.5 py-1 rounded-lg bg-teal-600 hover:bg-teal-500 text-white text-[11px] font-bold transition-all shadow-sm inline-flex items-center gap-1">
+                    <i data-lucide="qr-code" class="w-3 h-3"></i>
+                    <span>QRIS</span>
                   </button>
                 ` : '<span class="text-slate-500 text-xs">Selesai</span>'}
                 ${isAdmin ? `
@@ -4537,30 +4794,10 @@ Matur Suksma!`;
       showToast(`Data bon untuk ${targetBon.playerName} berhasil dihapus!`, 'success');
     }
 
-    function settleBon(bonId) {
+    function settleBon(bonId, defaultMethod = 'CASH') {
       const bon = bons.find(b => b.id === bonId);
       if (!bon) return;
-
-      bon.status = 'LUNAS';
-      bon.settledAt = new Date().toISOString();
-      setStored(KEY_BONS, bons);
-
-      // Record to transactions as Cash settlement
-      transactions.push({
-        id: 'TRX-' + Date.now().toString().slice(-6),
-        receiptNo: 'BON-LUNAS-' + bonId,
-        date: new Date().toISOString(),
-        cashier: currentUser ? currentUser.name : 'Kasir',
-        items: bon.items,
-        total: bon.total,
-        method: 'CASH',
-        notes: `Pelunasan Bon: ${bon.playerName}`
-      });
-      setStored(KEY_TRANSACTIONS, transactions);
-
-      renderBonTable();
-      updateBonBadge();
-      showToast(`Bon untuk ${bon.playerName} telah dilunasi!`, 'success');
+      openPaymentModal(defaultMethod, bonId);
     }
 
     // ==========================================
@@ -5905,6 +6142,10 @@ Matur Suksma!`;
             customQrisUrl = cloudData.qrisUrl;
             localStorage.setItem(KEY_QRIS, JSON.stringify(customQrisUrl));
           }
+          if (typeof cloudData.qrisPayload === 'string') {
+            customQrisPayload = cloudData.qrisPayload;
+            localStorage.setItem(KEY_QRIS_PAYLOAD, JSON.stringify(customQrisPayload));
+          }
           if (cloudData.webhookUrl) {
             savedWebhookUrl = cloudData.webhookUrl;
             localStorage.setItem(KEY_WEBHOOK, JSON.stringify(savedWebhookUrl));
@@ -5947,6 +6188,7 @@ Matur Suksma!`;
           users: users,
           rates: rentalRates,
           qrisUrl: customQrisUrl,
+          qrisPayload: customQrisPayload,
           webhookUrl: savedWebhookUrl || getStored(KEY_WEBHOOK, '')
         }, { merge: true });
       } catch (e) {
@@ -5994,6 +6236,27 @@ Matur Suksma!`;
     function renderIntegrationSettings() {
       const qrisImg = document.getElementById('qrisSettingsPreviewImg');
       if (qrisImg) qrisImg.src = customQrisUrl || DEFAULT_QRIS;
+
+      const rawInput = document.getElementById('qrisRawPayloadInput');
+      const dynBadge = document.getElementById('qrisDynamicStatusBadge');
+      const merchLabel = document.getElementById('qrisMerchantNameLabel');
+      const activePayload = customQrisPayload || getStored(KEY_QRIS_PAYLOAD, '');
+
+      if (rawInput) rawInput.value = activePayload;
+      if (activePayload && activePayload.startsWith('000201')) {
+        const mName = parseQrisMerchantName(activePayload) || 'GoPay Merchant';
+        if (dynBadge) {
+          dynBadge.innerText = '⚡ DINAMIS AKTIF';
+          dynBadge.className = 'px-2.5 py-1 rounded-full text-[10px] font-black uppercase bg-emerald-500/20 text-emerald-400 border border-emerald-500/30';
+        }
+        if (merchLabel) merchLabel.innerText = `Merchant Terhubung: ${mName}`;
+      } else {
+        if (dynBadge) {
+          dynBadge.innerText = 'MODE STATIS';
+          dynBadge.className = 'px-2.5 py-1 rounded-full text-[10px] font-black uppercase bg-slate-800 text-slate-400 border border-slate-700';
+        }
+        if (merchLabel) merchLabel.innerText = 'Singaraja Soccerfield (QRIS Statis)';
+      }
 
       const webhookInput = document.getElementById('sheetWebhookUrl');
       if (webhookInput) webhookInput.value = savedWebhookUrl || getStored(KEY_WEBHOOK, '');
@@ -6168,6 +6431,7 @@ Matur Suksma!`;
           users: users,
           rates: rentalRates,
           qrisUrl: customQrisUrl,
+          qrisPayload: customQrisPayload,
           webhookUrl: savedWebhookUrl || getStored(KEY_WEBHOOK, '')
         }, { merge: true });
 
@@ -6178,6 +6442,50 @@ Matur Suksma!`;
       }
     }
 
+    function extractQrisPayloadFromImage(img) {
+      if (typeof jsQR !== 'function') return '';
+      // Coba pindai pada beberapa skala & area crop (termasuk tengah poster GoPay Merchant)
+      const attempts = [
+        { sx: 0, sy: 0, sw: img.width, sh: img.height, scale: 1.0 },
+        { sx: 0, sy: 0, sw: img.width, sh: img.height, scale: Math.min(1.0, 900 / Math.max(img.width, img.height)) },
+        { sx: img.width * 0.1, sy: img.height * 0.15, sw: img.width * 0.8, sh: img.height * 0.7, scale: 1.0 },
+        { sx: img.width * 0.15, sy: img.height * 0.2, sw: img.width * 0.7, sh: img.height * 0.6, scale: 1.0 }
+      ];
+
+      for (const att of attempts) {
+        try {
+          const cw = Math.max(100, Math.round(att.sw * att.scale));
+          const ch = Math.max(100, Math.round(att.sh * att.scale));
+          const c = document.createElement('canvas');
+          c.width = cw;
+          c.height = ch;
+          const cx = c.getContext('2d');
+          cx.drawImage(img, att.sx, att.sy, att.sw, att.sh, 0, 0, cw, ch);
+          const imgData = cx.getImageData(0, 0, cw, ch);
+          const code = jsQR(imgData.data, imgData.width, imgData.height);
+          if (code && code.data && code.data.trim().startsWith('000201')) {
+            return code.data.trim();
+          }
+        } catch (err) {}
+      }
+      return '';
+    }
+
+    function saveManualQrisPayload() {
+      const val = (document.getElementById('qrisRawPayloadInput')?.value || '').trim();
+      if (!val || !val.startsWith('000201')) {
+        showToast('Kode EMVCo QRIS tidak valid! Pastikan diawali dengan 000201...', 'error');
+        return;
+      }
+      customQrisPayload = val;
+      setStored(KEY_QRIS_PAYLOAD, customQrisPayload);
+      customQrisUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=300x300&margin=6&data=' + encodeURIComponent(val);
+      setStored(KEY_QRIS, customQrisUrl);
+      immediateCloudSync();
+      renderIntegrationSettings();
+      showToast('⚡ Kode QRIS Dinamis GoPay Merchant berhasil diaktifkan!', 'success');
+    }
+
     function handleUploadQrisImage(e) {
       const file = e.target.files[0];
       if (!file) return;
@@ -6186,6 +6494,10 @@ Matur Suksma!`;
       reader.onload = (evt) => {
         const img = new Image();
         img.onload = () => {
+          // 1. Ekstrak Payload EMVCo QRIS Statis GoPay Merchant untuk dikonversi ke Dinamis
+          const extractedPayload = extractQrisPayloadFromImage(img);
+
+          // 2. Kompres gambar untuk cadangan tampilan
           const MAX_SIZE = 500;
           let width = img.width;
           let height = img.height;
@@ -6208,8 +6520,18 @@ Matur Suksma!`;
 
           customQrisUrl = canvas.toDataURL('image/jpeg', 0.85);
           setStored(KEY_QRIS, customQrisUrl);
+
+          if (extractedPayload) {
+            customQrisPayload = extractedPayload;
+            setStored(KEY_QRIS_PAYLOAD, customQrisPayload);
+            immediateCloudSync();
+            const mName = parseQrisMerchantName(extractedPayload);
+            showToast(`⚡ QRIS GoPay Merchant (${mName}) terdeteksi! Mode QRIS Dinamis Otomatis Aktif!`, 'success');
+          } else {
+            showToast('Foto QRIS disimpan (Statis). Untuk Auto-Dinamis, pastikan barcode QRIS terlihat jelas & tidak terpotong.', 'info');
+          }
+
           renderIntegrationSettings();
-          showToast('Foto QRIS berhasil diperbarui & dioptimalkan!', 'success');
         };
         img.src = evt.target.result;
       };
@@ -6218,7 +6540,10 @@ Matur Suksma!`;
 
     function resetQrisImageToDefault() {
       customQrisUrl = DEFAULT_QRIS;
+      customQrisPayload = '';
       setStored(KEY_QRIS, DEFAULT_QRIS);
+      setStored(KEY_QRIS_PAYLOAD, '');
+      immediateCloudSync();
       renderIntegrationSettings();
       showToast('QRIS dikembalikan ke default.', 'info');
     }
