@@ -164,6 +164,16 @@
       pointer-events: none !important;
     }
   </style>
+
+  <!-- PWA & Mobile App Configuration -->
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <meta name="theme-color" content="#090d16">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="SSF POS">
 </head>
 <body class="min-h-screen flex flex-col antialiased selection:bg-emerald-500 selection:text-white">
 
@@ -204,6 +214,12 @@
         <button type="button" onclick="handleLogin()" class="w-full py-3.5 bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white font-bold rounded-xl shadow-lg shadow-emerald-500/20 text-sm transition-all flex items-center justify-center gap-2">
           <span>Masuk ke Sistem</span>
           <i data-lucide="arrow-right" class="w-4 h-4"></i>
+        </button>
+
+        <!-- Tombol Install Aplikasi Android Otomatis (Muncul saat siap diinstal) -->
+        <button type="button" id="btnInstallPwaLogin" onclick="triggerPwaInstall()" class="hidden w-full py-3 bg-slate-800/90 hover:bg-slate-700 border border-emerald-500/40 text-emerald-400 font-bold rounded-xl text-xs transition-all flex items-center justify-center gap-2">
+          <i data-lucide="smartphone" class="w-4 h-4"></i>
+          <span>Install Aplikasi di Perangkat Ini</span>
         </button>
       </div>
 
@@ -249,6 +265,12 @@
               <span id="cloudSyncDot" class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
               <span id="cloudSyncText" class="font-mono text-slate-300">Cloud Sync</span>
             </div>
+
+            <!-- PWA Install Button in Navbar -->
+            <button type="button" id="btnInstallPwaNav" onclick="triggerPwaInstall()" title="Install Aplikasi Android" class="hidden items-center gap-1.5 text-[11px] font-bold text-emerald-400 bg-emerald-950/50 hover:bg-emerald-900/60 border border-emerald-500/40 px-2.5 py-1.5 rounded-xl transition-all">
+              <i data-lucide="download" class="w-3.5 h-3.5"></i>
+              <span class="hidden md:inline">Install App</span>
+            </button>
 
             <div class="flex items-center gap-2">
               <div class="text-right hidden sm:block">
@@ -6095,6 +6117,73 @@ Salam Olahraga & Fairplay!`;
         lucide.createIcons();
       } catch (e) {
         console.warn('Lucide icons error:', e);
+      }
+    });
+  </script>
+
+  <!-- ========================================== -->
+  <!-- 5. PWA SERVICE WORKER & INSTALL HANDLER    -->
+  <!-- ========================================== -->
+  <script>
+    let deferredPwaPrompt = null;
+
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js')
+          .then((reg) => {
+            console.log('PWA Service Worker aktif:', reg.scope);
+          })
+          .catch((err) => {
+            console.warn('Registrasi Service Worker gagal:', err);
+          });
+      });
+    }
+
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferredPwaPrompt = e;
+      const btnLogin = document.getElementById('btnInstallPwaLogin');
+      const btnNav = document.getElementById('btnInstallPwaNav');
+      if (btnLogin) btnLogin.classList.remove('hidden');
+      if (btnNav) {
+        btnNav.classList.remove('hidden');
+        btnNav.classList.add('flex');
+      }
+      try { lucide.createIcons(); } catch (err) {}
+    });
+
+    async function triggerPwaInstall() {
+      if (!deferredPwaPrompt) {
+        if (typeof showToast === 'function') {
+          showToast('Gunakan menu browser Chrome (Titik Tiga > Tambahkan ke Layar Utama / Install Aplikasi).', 'info');
+        }
+        return;
+      }
+      deferredPwaPrompt.prompt();
+      const { outcome } = await deferredPwaPrompt.userChoice;
+      if (outcome === 'accepted') {
+        const btnLogin = document.getElementById('btnInstallPwaLogin');
+        const btnNav = document.getElementById('btnInstallPwaNav');
+        if (btnLogin) btnLogin.classList.add('hidden');
+        if (btnNav) {
+          btnNav.classList.add('hidden');
+          btnNav.classList.remove('flex');
+        }
+        if (typeof showToast === 'function') {
+          showToast('Aplikasi Singaraja Soccerfield sedang diinstal!', 'success');
+        }
+      }
+      deferredPwaPrompt = null;
+    }
+
+    window.addEventListener('appinstalled', () => {
+      deferredPwaPrompt = null;
+      const btnLogin = document.getElementById('btnInstallPwaLogin');
+      const btnNav = document.getElementById('btnInstallPwaNav');
+      if (btnLogin) btnLogin.classList.add('hidden');
+      if (btnNav) {
+        btnNav.classList.add('hidden');
+        btnNav.classList.remove('flex');
       }
     });
   </script>
