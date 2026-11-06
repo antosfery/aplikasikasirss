@@ -266,6 +266,13 @@
               <span id="cloudSyncText" class="font-mono text-slate-300">Cloud Sync</span>
             </div>
 
+            <!-- Bluetooth 58mm Printer Status / Connect Button -->
+            <button type="button" id="btPrinterBadge" onclick="connectBluetoothPrinterManual()" class="flex items-center gap-1.5 text-[11px] font-semibold text-slate-300 bg-slate-950/60 hover:bg-slate-800 border border-slate-800 px-2.5 py-1.5 rounded-xl transition-all" title="Klik untuk menghubungkan Printer Bluetooth 58mm">
+              <span id="btPrinterDot" class="w-2 h-2 rounded-full bg-slate-500"></span>
+              <i data-lucide="bluetooth" class="w-3.5 h-3.5 text-blue-400"></i>
+              <span id="btPrinterText" class="font-mono text-slate-300 hidden xs:inline">BT 58mm</span>
+            </button>
+
             <!-- PWA Install Button in Navbar -->
             <button type="button" id="btnInstallPwaNav" onclick="triggerPwaInstall()" title="Install Aplikasi Android" class="hidden items-center gap-1.5 text-[11px] font-bold text-emerald-400 bg-emerald-950/50 hover:bg-emerald-900/60 border border-emerald-500/40 px-2.5 py-1.5 rounded-xl transition-all">
               <i data-lucide="download" class="w-3.5 h-3.5"></i>
@@ -1724,11 +1731,15 @@
           <i data-lucide="x" class="w-4 h-4"></i>
           <span>Keluar</span>
         </button>
-        <button type="button" onclick="printReceiptDirect()" class="py-3 px-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-lg shadow-emerald-600/20">
-          <i data-lucide="printer" class="w-4 h-4"></i>
-          <span>Cetak Nota</span>
+        <button type="button" id="btnPrintBtModal" onclick="printReceiptDirect()" class="py-3 px-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-lg shadow-emerald-600/20">
+          <i data-lucide="bluetooth" class="w-4 h-4"></i>
+          <span>Cetak Nota (BT)</span>
         </button>
       </div>
+      <button type="button" onclick="printReceiptBrowserFallback()" class="w-full py-2 bg-slate-950 hover:bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-800 rounded-xl text-[11px] font-semibold transition-all flex items-center justify-center gap-1.5">
+        <i data-lucide="printer" class="w-3.5 h-3.5"></i>
+        <span>Cetak via Dialog Browser / USB</span>
+      </button>
     </div>
   </div>
 
@@ -3746,9 +3757,274 @@ Matur Suksma!`;
       closeModal('paymentSuccessModal');
     }
 
-    function printReceiptDirect() {
-      if (!lastCompletedTransaction) return;
-      preparePrintReceipt(lastCompletedTransaction);
+    // ==========================================
+    // WEB BLUETOOTH DIRECT 58MM ESC/POS PRINTER
+    // ==========================================
+    let bluetoothPrinterDevice = null;
+    let bluetoothCharacteristic = null;
+    let isBtPrinting = false;
+
+    const BT_PRINTER_SERVICES = [
+      '000018f0-0000-1000-8000-00805f9b34fb',
+      'e7810a71-73ae-499d-8c15-faa9aef0c3f2',
+      '49535343-fe7d-4ae5-8fa9-9fafd205e455',
+      '0000ff00-0000-1000-8000-00805f9b34fb',
+      '0000ffe0-0000-1000-8000-00805f9b34fb',
+      '6e400001-b5a3-f393-e0a9-e50e24dcca9e',
+      '0000fee7-0000-1000-8000-00805f9b34fb'
+    ];
+
+    function updateBtPrinterBadge(connected, deviceName = '') {
+      const dot = document.getElementById('btPrinterDot');
+      const text = document.getElementById('btPrinterText');
+      const badge = document.getElementById('btPrinterBadge');
+      if (!dot || !text || !badge) return;
+
+      if (connected) {
+        dot.className = 'w-2 h-2 rounded-full bg-emerald-400 animate-pulse';
+        text.innerText = deviceName ? deviceName.slice(0, 10) : 'BT Aktif';
+        text.className = 'font-mono text-emerald-400 font-bold hidden xs:inline';
+        badge.border = 'border-emerald-500/40';
+      } else {
+        dot.className = 'w-2 h-2 rounded-full bg-slate-500';
+        text.innerText = 'BT 58mm';
+        text.className = 'font-mono text-slate-300 hidden xs:inline';
+      }
+    }
+
+    async function findWritableCharacteristic(server) {
+      const services = await server.getPrimaryServices();
+      for (const service of services) {
+        try {
+          const characteristics = await service.getCharacteristics();
+          for (const char of characteristics) {
+            if (char.properties.writeWithoutResponse || char.properties.write) {
+              return char;
+            }
+          }
+        } catch (e) {
+          console.warn('Skip service:', e);
+        }
+      }
+      return null;
+    }
+
+    async function ensureBluetoothPrinterConnected() {
+      if (!navigator.bluetooth) {
+        throw new Error('Browser tidak mendukung Web Bluetooth. Gunakan Chrome di Android/Desktop.');
+      }
+
+      // 1. Jika sudah terhubung aktif, langsung pakai
+      if (bluetoothPrinterDevice && bluetoothPrinterDevice.gatt && bluetoothPrinterDevice.gatt.connected && bluetoothCharacteristic) {
+        return bluetoothCharacteristic;
+      }
+
+      // 2. Coba rekoneksi otomatis ke perangkat terakhir yang dipilih pada sesi ini
+      if (bluetoothPrinterDevice && bluetoothPrinterDevice.gatt) {
+        try {
+          const server = await bluetoothPrinterDevice.gatt.connect();
+          const char = await findWritableCharacteristic(server);
+          if (char) {
+            bluetoothCharacteristic = char;
+            updateBtPrinterBadge(true, bluetoothPrinterDevice.name);
+            return bluetoothCharacteristic;
+          }
+        } catch (reconnErr) {
+          console.warn('Auto-reconnect gagal, meminta pemilihan perangkat:', reconnErr);
+        }
+      }
+
+      // 3. Coba cek izin perangkat yang pernah disimpan di Chrome (getDevices)
+      if (typeof navigator.bluetooth.getDevices === 'function') {
+        try {
+          const permittedDevices = await navigator.bluetooth.getDevices();
+          if (permittedDevices && permittedDevices.length > 0) {
+            for (const dev of permittedDevices) {
+              try {
+                const server = await dev.gatt.connect();
+                const char = await findWritableCharacteristic(server);
+                if (char) {
+                  bluetoothPrinterDevice = dev;
+                  bluetoothCharacteristic = char;
+                  dev.addEventListener('gattserverdisconnected', () => {
+                    bluetoothCharacteristic = null;
+                    updateBtPrinterBadge(false);
+                  });
+                  updateBtPrinterBadge(true, dev.name);
+                  return bluetoothCharacteristic;
+                }
+              } catch (e) {}
+            }
+          }
+        } catch (e) {}
+      }
+
+      // 4. Minta pengguna memilih printer Bluetooth 58mm
+      showToast('Pilih Printer Bluetooth 58mm Anda...', 'info');
+      const device = await navigator.bluetooth.requestDevice({
+        acceptAllDevices: true,
+        optionalServices: BT_PRINTER_SERVICES
+      });
+
+      device.addEventListener('gattserverdisconnected', () => {
+        bluetoothCharacteristic = null;
+        updateBtPrinterBadge(false);
+        showToast('Koneksi Printer Bluetooth terputus.', 'info');
+      });
+
+      const server = await device.gatt.connect();
+      const char = await findWritableCharacteristic(server);
+
+      if (!char) {
+        throw new Error('Perangkat Bluetooth ini tidak memiliki layanan cetak ESC/POS.');
+      }
+
+      bluetoothPrinterDevice = device;
+      bluetoothCharacteristic = char;
+      updateBtPrinterBadge(true, device.name);
+      showToast(`Terhubung ke Printer ${device.name || 'Bluetooth 58mm'}!`, 'success');
+      return bluetoothCharacteristic;
+    }
+
+    async function connectBluetoothPrinterManual() {
+      try {
+        await ensureBluetoothPrinterConnected();
+      } catch (err) {
+        if (err && err.name !== 'NotFoundError') {
+          showToast('Koneksi Bluetooth gagal: ' + err.message, 'error');
+        }
+      }
+    }
+
+    function formatEscPosLine(leftText, rightText, maxLen = 32) {
+      const cleanLeft = String(leftText || '');
+      const cleanRight = String(rightText || '');
+      const spaces = Math.max(1, maxLen - cleanLeft.length - cleanRight.length);
+      return cleanLeft + ' '.repeat(spaces) + cleanRight + '\n';
+    }
+
+    function buildEscPosReceiptBytes(trx) {
+      const encoder = new TextEncoder();
+      const chunks = [];
+      const pushBytes = (arr) => chunks.push(new Uint8Array(arr));
+      const pushText = (str) => chunks.push(encoder.encode(str));
+
+      const dateStr = trx.date ? new Date(trx.date).toLocaleString('id-ID') : '-';
+      const cashierStr = trx.cashier || 'Kasir';
+      const noStr = trx.receiptNo || trx.id || '-';
+
+      // Inisialisasi Printer (ESC @)
+      pushBytes([0x1B, 0x40]);
+
+      // Align Center (ESC a 1) & Bold ON (ESC E 1)
+      pushBytes([0x1B, 0x61, 0x01]);
+      pushBytes([0x1B, 0x45, 0x01]);
+      pushText('SINGARAJA SOCCERFIELD\n');
+      pushBytes([0x1B, 0x45, 0x00]); // Bold OFF
+      pushText('Jl. Pulau Dewata 3, Pemaron\n');
+      pushText('WA: 085137770828\n');
+      pushText('--------------------------------\n');
+
+      // Align Left (ESC a 0)
+      pushBytes([0x1B, 0x61, 0x00]);
+      pushText(`Tgl  : ${dateStr}\n`);
+      pushText(`Kasir: ${cashierStr}\n`);
+      pushText(`No   : ${noStr}\n`);
+      pushText('--------------------------------\n');
+
+      // Daftar Barang
+      (trx.items || []).forEach(item => {
+        const itemName = String(item.name || 'Item').slice(0, 32);
+        const qtyPrice = `${item.qty}x ${Number(item.price || 0).toLocaleString('id-ID')}`;
+        const subTotal = formatRupiah((item.price || 0) * (item.qty || 1));
+        pushText(itemName + '\n');
+        pushText(formatEscPosLine('  ' + qtyPrice, subTotal, 32));
+      });
+
+      pushText('--------------------------------\n');
+
+      // Ringkasan Total (Bold ON untuk Total)
+      pushBytes([0x1B, 0x45, 0x01]);
+      pushText(formatEscPosLine('Total Tagihan:', formatRupiah(trx.total), 32));
+      pushBytes([0x1B, 0x45, 0x00]);
+
+      pushText(formatEscPosLine('Metode Bayar:', String(trx.method || 'CASH'), 32));
+      if ((trx.method || 'CASH') === 'CASH') {
+        pushText(formatEscPosLine('Bayar:', formatRupiah(trx.cashReceived || trx.total), 32));
+        pushText(formatEscPosLine('Kembalian:', formatRupiah(trx.change || 0), 32));
+      }
+
+      pushText('--------------------------------\n');
+
+      // Footer Center
+      pushBytes([0x1B, 0x61, 0x01]);
+      pushText('Matur Suksma sampun mampir!\n');
+      pushText('Salam Olahraga & Fairplay\n\n\n');
+
+      // Feed 3 baris (ESC d 3)
+      pushBytes([0x1B, 0x64, 0x03]);
+
+      // Gabungkan seluruh Uint8Array menjadi 1 buffer utuh
+      const totalLength = chunks.reduce((acc, c) => acc + c.length, 0);
+      const combined = new Uint8Array(totalLength);
+      let offset = 0;
+      for (const c of chunks) {
+        combined.set(c, offset);
+        offset += c.length;
+      }
+      return combined;
+    }
+
+    async function printViaBluetoothDirect(trx) {
+      if (!trx) return;
+      if (!navigator.bluetooth) {
+        showToast('Web Bluetooth tidak tersedia di browser ini, mengalihkan ke cetak standar...', 'info');
+        printReceiptBrowserFallback(trx);
+        return;
+      }
+
+      if (isBtPrinting) {
+        showToast('Sedang memproses cetakan ke printer...', 'info');
+        return;
+      }
+
+      try {
+        isBtPrinting = true;
+        const char = await ensureBluetoothPrinterConnected();
+        const dataBytes = buildEscPosReceiptBytes(trx);
+
+        // Kirim data secara bertahap (chunk 20 byte) agar buffer printer Bluetooth 58mm tidak penuh
+        const CHUNK_SIZE = 20;
+        for (let i = 0; i < dataBytes.length; i += CHUNK_SIZE) {
+          const slice = dataBytes.slice(i, i + CHUNK_SIZE);
+          if (char.properties.writeWithoutResponse && typeof char.writeValueWithoutResponse === 'function') {
+            await char.writeValueWithoutResponse(slice);
+          } else {
+            await char.writeValue(slice);
+          }
+          await new Promise(res => setTimeout(res, 15));
+        }
+
+        showToast('Nota berhasil dicetak langsung ke Printer Bluetooth 58mm!', 'success');
+        closeModal('paymentSuccessModal');
+      } catch (err) {
+        console.error('Bluetooth print error:', err);
+        bluetoothCharacteristic = null;
+        updateBtPrinterBadge(false);
+        if (err && err.name === 'NotFoundError') {
+          showToast('Pencarian printer Bluetooth dibatalkan.', 'info');
+        } else {
+          showToast('Gagal cetak Bluetooth: ' + (err.message || err), 'error');
+        }
+      } finally {
+        isBtPrinting = false;
+      }
+    }
+
+    function printReceiptBrowserFallback(customTrx = null) {
+      const targetTrx = customTrx || lastCompletedTransaction;
+      if (!targetTrx) return;
+      preparePrintReceipt(targetTrx);
       document.body.classList.remove('printing-invoice');
       document.body.classList.add('printing-receipt');
       window.print();
@@ -3758,19 +4034,18 @@ Matur Suksma!`;
       closeModal('paymentSuccessModal');
     }
 
+    function printReceiptDirect() {
+      if (!lastCompletedTransaction) return;
+      printViaBluetoothDirect(lastCompletedTransaction);
+    }
+
     function reprintReceipt(trxId) {
       const trx = transactions.find(t => t.id === trxId);
       if (!trx) {
         showToast('Data transaksi tidak ditemukan!', 'error');
         return;
       }
-      preparePrintReceipt(trx);
-      document.body.classList.remove('printing-invoice');
-      document.body.classList.add('printing-receipt');
-      window.print();
-      setTimeout(() => {
-        document.body.classList.remove('printing-receipt');
-      }, 500);
+      printViaBluetoothDirect(trx);
     }
 
     function preparePrintReceipt(trx) {
