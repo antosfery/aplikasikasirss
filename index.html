@@ -2452,12 +2452,22 @@
     const KEY_ACTIVE_TAB = 'ssf_active_tab_v5';
     const KEY_INVOICE_DATA = 'ssf_invoice_draft_v1';
     const KEY_FIREBASE = 'ssf_firebase_config_v5';
+    const KEY_DELETED_IDS = 'ssf_deleted_ids_v5';
+
+    // Daftar ID Dummy lama yang wajib dibersihkan otomatis dari LocalStorage & Cloud
+    const PURGED_DUMMY_IDS = new Set([
+      'ATT-101', 'ATT-102',
+      'TRX-101', 'TRX-102',
+      'BON-101',
+      'BKG-101', 'BKG-102',
+      'EXP-101', 'EXP-102'
+    ]);
 
     // Safe Storage Helpers
     function getStored(key, fallback) {
       try {
         const val = localStorage.getItem(key);
-        return val ? JSON.parse(val) : fallback;
+        return val !== null ? JSON.parse(val) : fallback;
       } catch (e) {
         return fallback;
       }
@@ -2480,7 +2490,7 @@
       { id: 'USR-3', username: 'kasir2', password: '1234', name: 'Wayan Yoga', role: 'Kasir' }
     ];
 
-    // Default Mock Datasets
+    // Default Katalog Produk
     const defaultProducts = [
       { id: 'PRD-1', name: 'Pocari Sweat 500ml', category: 'MINUMAN', cost: 6000, price: 9000, stock: 45, barcode: '89912345601', img: 'https://placehold.co/200x200/0f172a/34d399?text=Pocari' },
       { id: 'PRD-2', name: 'Aqua 600ml Dingin', category: 'MINUMAN', cost: 3000, price: 5000, stock: 60, barcode: '89912345602', img: 'https://placehold.co/200x200/0f172a/34d399?text=Aqua' },
@@ -2491,29 +2501,12 @@
       { id: 'PRD-7', name: 'Sewa Rompi Tim (1 Set)', category: 'PERLENGKAPAN', cost: 0, price: 20000, stock: 10, barcode: '89912345607', img: 'https://placehold.co/200x200/0f172a/34d399?text=Rompi' }
     ];
 
-    const defaultTransactions = [
-      { id: 'TRX-101', receiptNo: 'INV-20261105-01', date: new Date().toISOString(), cashier: 'Kadek Sudarma', items: [{ name: 'Pocari Sweat 500ml', price: 9000, qty: 2 }, { name: 'Aqua 600ml Dingin', price: 5000, qty: 1 }], total: 23000, method: 'CASH', cashReceived: 25000, change: 2000 },
-      { id: 'TRX-102', receiptNo: 'INV-20261105-02', date: new Date().toISOString(), cashier: 'Kadek Sudarma', items: [{ name: 'Indomie Goreng + Telur', price: 12000, qty: 2 }], total: 24000, method: 'QRIS', cashReceived: 24000, change: 0 }
-    ];
-
-    const defaultBons = [
-      { id: 'BON-101', date: new Date().toISOString(), playerName: 'Tim Sparta (Bli Ketut)', phone: '081234567890', notes: 'Main jam 18.00', items: [{ name: 'Pocari Sweat 500ml', price: 9000, qty: 3 }, { name: 'Aqua 600ml Dingin', price: 5000, qty: 2 }], total: 37000, status: 'BELUM_LUNAS', cashier: 'Kadek Sudarma' }
-    ];
-
-    const defaultBookings = [
-      { bookingId: 'BKG-101', customerName: 'FC Pemaron Mandiri', phone: '081987654321', date: new Date().toISOString().slice(0, 10), startTime: '16:00', endTime: '18:00', totalPrice: 1600000, downPayment: 500000, paymentStatus: 'BELUM_LUNAS', notes: 'Sewa Rompi dan Wasit' },
-      { bookingId: 'BKG-102', customerName: 'Singaraja All-Stars', phone: '085123987456', date: new Date().toISOString().slice(0, 10), startTime: '19:00', endTime: '21:00', totalPrice: 1600000, downPayment: 1600000, paymentStatus: 'LUNAS', notes: 'Lunas Transfer QRIS' }
-    ];
-
-    const defaultExpenses = [
-      { id: 'EXP-101', date: new Date().toISOString(), category: 'KASIR', itemName: 'Es Batu Kristal (3 Bal)', amount: 30000, recordedBy: 'Kadek Sudarma', notes: 'Toko Bu Made' },
-      { id: 'EXP-102', date: new Date().toISOString(), category: 'LAPANGAN', itemName: 'Lampu LED Sorot 100W', amount: 175000, recordedBy: 'Wayan Yoga', notes: 'Penggantian lampu barat' }
-    ];
-
-    const defaultAttendance = [
-      { id: 'ATT-101', date: new Date().toISOString().slice(0, 10), employeeName: 'Kadek Sudarma', role: 'Kasir', timeIn: '08:00', timeOut: '17:00', status: 'HADIR', kasbonAmount: 0, kasbonReason: '-' },
-      { id: 'ATT-102', date: new Date().toISOString().slice(0, 10), employeeName: 'Wayan Yoga', role: 'Penjaga Lapangan', timeIn: '14:00', timeOut: '23:00', status: 'HADIR', kasbonAmount: 50000, kasbonReason: 'Bensin & Tambal Ban' }
-    ];
+    // Semua data operasional dimulai bersih tanpa data dummy
+    const defaultTransactions = [];
+    const defaultBons = [];
+    const defaultBookings = [];
+    const defaultExpenses = [];
+    const defaultAttendance = [];
 
     const defaultEmployees = [
       { id: 'EMP-1', name: 'Kadek Sudarma', role: 'Kasir' },
@@ -2546,17 +2539,69 @@
       dbUrl: "https://singarajasoccerfield-1f2bb-default-rtdb.firebaseio.com"
     };
 
-    // Global State & Chart Instances
+    // Global State & Deleted IDs Tracker (Mencegah data yang sudah dihapus muncul lagi dari Cloud)
     let currentUser = null;
+    let deletedIds = getStored(KEY_DELETED_IDS, []);
+    if (!Array.isArray(deletedIds)) deletedIds = [];
+
+    function isRecordDeletedOrDummy(recId) {
+      if (!recId) return false;
+      const strId = String(recId);
+      return PURGED_DUMMY_IDS.has(strId) || deletedIds.includes(strId);
+    }
+
+    function markRecordDeleted(recId) {
+      if (!recId) return;
+      const strId = String(recId);
+      if (!deletedIds.includes(strId)) {
+        deletedIds.push(strId);
+        try {
+          localStorage.setItem(KEY_DELETED_IDS, JSON.stringify(deletedIds));
+        } catch (e) {}
+      }
+    }
+
+    function cleanDatasetArray(arr, idKey = 'id') {
+      if (!Array.isArray(arr)) return [];
+      return arr.filter(item => item && !isRecordDeletedOrDummy(item[idKey]));
+    }
+
+    function mergeUniqueById(localArr, cloudArr, idKey = 'id') {
+      const map = new Map();
+      // Masukkan data cloud terlebih dahulu
+      if (Array.isArray(cloudArr)) {
+        cloudArr.forEach(item => {
+          if (item && item[idKey] && !isRecordDeletedOrDummy(item[idKey])) {
+            map.set(String(item[idKey]), item);
+          }
+        });
+      }
+      // Timpa/tambahkan dengan data lokal terbaru yang belum terhapus
+      if (Array.isArray(localArr)) {
+        localArr.forEach(item => {
+          if (item && item[idKey] && !isRecordDeletedOrDummy(item[idKey])) {
+            map.set(String(item[idKey]), item);
+          }
+        });
+      }
+      return Array.from(map.values());
+    }
+
     let users = getStored(KEY_USERS, defaultUsers);
-    let products = getStored(KEY_PRODUCTS, defaultProducts);
-    let transactions = getStored(KEY_TRANSACTIONS, defaultTransactions);
-    let bons = getStored(KEY_BONS, defaultBons);
-    let bookings = getStored(KEY_BOOKINGS, defaultBookings);
-    let expenses = getStored(KEY_EXPENSES, defaultExpenses);
-    let attendance = getStored(KEY_ATTENDANCE, defaultAttendance);
-    let employees = getStored(KEY_EMPLOYEES, defaultEmployees);
-    let closings = getStored(KEY_CLOSINGS, []);
+    let products = cleanDatasetArray(getStored(KEY_PRODUCTS, defaultProducts), 'id');
+    let transactions = cleanDatasetArray(getStored(KEY_TRANSACTIONS, defaultTransactions), 'id');
+    let bons = cleanDatasetArray(getStored(KEY_BONS, defaultBons), 'id');
+    let bookings = cleanDatasetArray(getStored(KEY_BOOKINGS, defaultBookings), 'bookingId');
+    let expenses = cleanDatasetArray(getStored(KEY_EXPENSES, defaultExpenses), 'id');
+    let attendance = cleanDatasetArray(getStored(KEY_ATTENDANCE, defaultAttendance), 'id');
+    let employees = cleanDatasetArray(getStored(KEY_EMPLOYEES, defaultEmployees), 'id');
+    let closings = cleanDatasetArray(getStored(KEY_CLOSINGS, []), 'id');
+
+    // Simpan kembali hasil pembersihan dummy awal ke localStorage
+    try {
+      localStorage.setItem(KEY_ATTENDANCE, JSON.stringify(attendance));
+      localStorage.setItem(KEY_CLOSINGS, JSON.stringify(closings));
+    } catch (e) {}
     let rentalRates = getStored(KEY_RATES, defaultRates);
     const KEY_QRIS_PAYLOAD = 'ssf_qris_raw_payload_v5';
     let customQrisUrl = getStored(KEY_QRIS, DEFAULT_QRIS);
@@ -3376,6 +3421,7 @@ Matur Suksma!`;
       }
 
       const targetTrx = transactions[trxIndex];
+      markRecordDeleted(trxId);
 
       // Kembalikan stok barang yang sebelumnya terjual (Rollback Stock)
       if (Array.isArray(targetTrx.items)) {
@@ -4689,6 +4735,7 @@ Matur Suksma!`;
 
       bons.push(bon);
       setStored(KEY_BONS, bons);
+      immediateCloudSync();
 
       closeModal('bonModal');
       clearCart();
@@ -4771,6 +4818,7 @@ Matur Suksma!`;
       }
 
       const targetBon = bons[bonIndex];
+      markRecordDeleted(bonId);
 
       // Jika bon belum lunas, kembalikan stok barang yang sebelumnya dikeluarkan
       if (targetBon.status === 'BELUM_LUNAS' && Array.isArray(targetBon.items)) {
@@ -5153,6 +5201,7 @@ Matur Suksma!`;
 
       bookings.push(booking);
       setStored(KEY_BOOKINGS, bookings);
+      immediateCloudSync();
       closeModal('bookingModal');
       renderBookingList();
       showToast('Booking lapangan berhasil disimpan!', 'success');
@@ -5221,6 +5270,7 @@ Matur Suksma!`;
         showToast('Akses ditolak! Hanya Administrator yang berhak menghapus data booking.', 'error');
         return;
       }
+      markRecordDeleted(bId);
       bookings = bookings.filter(b => b.bookingId !== bId);
       setStored(KEY_BOOKINGS, bookings);
       immediateCloudSync(); // Sinkronisasi instan ke Cloud agar permanen
@@ -5275,6 +5325,7 @@ Matur Suksma!`;
 
       expenses.push(exp);
       setStored(KEY_EXPENSES, expenses);
+      immediateCloudSync();
       closeModal('expenseModal');
       renderExpenseTable();
       showToast('Pengeluaran berhasil dicatat!', 'success');
@@ -5323,6 +5374,7 @@ Matur Suksma!`;
         showToast('Akses ditolak! Hanya Administrator yang berhak menghapus pengeluaran.', 'error');
         return;
       }
+      markRecordDeleted(expId);
       expenses = expenses.filter(e => e.id !== expId);
       setStored(KEY_EXPENSES, expenses);
       immediateCloudSync(); // Sinkronisasi instan ke Cloud agar permanen
@@ -5333,20 +5385,42 @@ Matur Suksma!`;
     // ==========================================
     // ATTENDANCE & EMPLOYEES OPERATIONS
     // ==========================================
+    function ensureEmployeesListPopulated() {
+      if (!Array.isArray(employees)) {
+        employees = [...defaultEmployees];
+      }
+      // Bersihkan ID yang sudah pernah dihapus
+      employees = cleanDatasetArray(employees, 'id');
+      if (employees.length === 0) {
+        employees = [...defaultEmployees.filter(e => !isRecordDeletedOrDummy(e.id))];
+      }
+    }
+
     function renderAttendancePage() {
+      ensureEmployeesListPopulated();
+      attendance = cleanDatasetArray(attendance, 'id');
+
       const select = document.getElementById('attEmployeeSelect');
       if (select) {
+        const prevSelected = select.value;
         select.innerHTML = employees.map(emp => `
           <option value="${emp.name}">${emp.name} (${emp.role})</option>
         `).join('');
+        if (prevSelected && employees.some(e => e.name === prevSelected)) {
+          select.value = prevSelected;
+        }
       }
 
       const filterSelect = document.getElementById('attFilterEmployee');
       if (filterSelect) {
         const curVal = filterSelect.value || 'ALL';
+        const allEmpNames = [...new Set([
+          ...employees.map(emp => emp.name),
+          ...attendance.map(a => a.employeeName).filter(Boolean)
+        ])];
         filterSelect.innerHTML = `<option value="ALL">-- Semua Karyawan --</option>` +
-          employees.map(emp => `<option value="${emp.name}">${emp.name}</option>`).join('');
-        filterSelect.value = curVal;
+          allEmpNames.map(name => `<option value="${name}">${name}</option>`).join('');
+        filterSelect.value = allEmpNames.includes(curVal) ? curVal : 'ALL';
       }
 
       const body = document.getElementById('attendanceTableBody');
@@ -5356,20 +5430,18 @@ Matur Suksma!`;
       const colSpan = isAdmin ? 8 : 7;
 
       if (attendance.length === 0) {
-        body.innerHTML = `<tr><td colspan="${colSpan}" class="p-8 text-center text-slate-500">Belum ada catatan absensi.</td></tr>`;
+        body.innerHTML = `<tr><td colspan="${colSpan}" class="p-8 text-center text-slate-500">Belum ada catatan absensi karyawan. Klik "Input Absensi Hari Ini" untuk mencatat kehadiran.</td></tr>`;
         return;
       }
 
       const filterEmp = document.getElementById('attFilterEmployee')?.value || 'ALL';
       let list = attendance.filter(a => filterEmp === 'ALL' || a.employeeName === filterEmp);
 
-      // Sortir: Berdasarkan Nama Karyawan (A-Z), lalu Tanggal berurutan secara kronologis (dari terlama ke terbaru)
+      // Sortir: Tanggal terbaru di atas, lalu Nama Karyawan (A-Z)
       list.sort((a, b) => {
-        const nameComparison = (a.employeeName || '').localeCompare(b.employeeName || '', 'id');
-        if (nameComparison !== 0) {
-          return nameComparison;
-        }
-        return (a.date || '').localeCompare(b.date || '');
+        const dateComp = (b.date || '').localeCompare(a.date || '');
+        if (dateComp !== 0) return dateComp;
+        return (a.employeeName || '').localeCompare(b.employeeName || '', 'id');
       });
 
       if (list.length === 0) {
@@ -5417,19 +5489,25 @@ Matur Suksma!`;
       }
 
       const targetAtt = attendance[attIndex];
+      markRecordDeleted(attId);
       attendance.splice(attIndex, 1);
       setStored(KEY_ATTENDANCE, attendance);
       immediateCloudSync(); // Sinkronisasi instan ke Cloud agar permanen
 
       renderAttendancePage();
-      showToast(`Data absensi ${targetAtt.employeeName} (${targetAtt.date}) berhasil dihapus!`, 'success');
+      showToast(`Data absensi ${targetAtt.employeeName} (${targetAtt.date}) berhasil dihapus permanen!`, 'success');
     }
 
     function openAttendanceModal() {
       renderAttendancePage();
       const dateInput = document.getElementById('attDate');
       if (dateInput) {
-        dateInput.value = new Date().toISOString().slice(0, 10);
+        dateInput.value = getLocalDateString(new Date());
+      }
+      const select = document.getElementById('attEmployeeSelect');
+      if (select && currentUser) {
+        const matchEmp = employees.find(e => e.name.toLowerCase() === currentUser.name.toLowerCase());
+        if (matchEmp) select.value = matchEmp.name;
       }
       document.getElementById('attKasbon').value = '';
       document.getElementById('attKasbonReason').value = '';
@@ -5437,9 +5515,9 @@ Matur Suksma!`;
     }
 
     function saveAttendanceData() {
-      const empName = document.getElementById('attEmployeeSelect')?.value;
+      const empName = (document.getElementById('attEmployeeSelect')?.value || '').trim();
       const emp = employees.find(e => e.name === empName);
-      const inputDate = document.getElementById('attDate')?.value || new Date().toISOString().slice(0, 10);
+      const inputDate = document.getElementById('attDate')?.value || getLocalDateString(new Date());
       const timeIn = document.getElementById('attTimeIn')?.value || '08:00';
       const timeOut = document.getElementById('attTimeOut')?.value || '17:00';
       const status = document.getElementById('attStatus')?.value || 'HADIR';
@@ -5452,22 +5530,32 @@ Matur Suksma!`;
       }
 
       const att = {
-        id: 'ATT-' + Date.now().toString().slice(-6),
+        id: 'ATT-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
         date: inputDate,
         employeeName: empName,
-        role: emp ? emp.role : 'Kasir',
+        role: emp ? emp.role : (currentUser ? currentUser.role : 'Kasir'),
         timeIn: timeIn,
         timeOut: timeOut,
         status: status,
         kasbonAmount: kasbon,
-        kasbonReason: reason
+        kasbonReason: reason,
+        createdAt: new Date().toISOString()
       };
 
+      if (!Array.isArray(attendance)) attendance = [];
       attendance.push(att);
+
+      // Reset filter agar data yang baru diinput langsung terlihat
+      const filterSelect = document.getElementById('attFilterEmployee');
+      if (filterSelect) filterSelect.value = 'ALL';
+
       setStored(KEY_ATTENDANCE, attendance);
+      immediateCloudSync();
+      syncAttendanceToWebhook(att);
+
       closeModal('attendanceModal');
       renderAttendancePage();
-      showToast(`Absensi ${empName} (${inputDate}) berhasil disimpan!`, 'success');
+      showToast(`✅ Absensi ${empName} (${inputDate}) berhasil disimpan ke Database!`, 'success');
     }
 
     function openEmployeeMasterModal() {
@@ -5504,21 +5592,24 @@ Matur Suksma!`;
       }
 
       employees.push({
-        id: 'EMP-' + Date.now().toString().slice(-4),
+        id: 'EMP-' + Date.now().toString().slice(-5),
         name: name,
         role: role
       });
 
       setStored(KEY_EMPLOYEES, employees);
+      immediateCloudSync();
       document.getElementById('newEmpName').value = '';
       renderEmployeeListModal();
       renderAttendancePage();
-      showToast('Karyawan baru berhasil ditambahkan!', 'success');
+      showToast('Karyawan baru berhasil ditambahkan & disimpan ke Cloud!', 'success');
     }
 
     function removeEmployee(empId) {
+      markRecordDeleted(empId);
       employees = employees.filter(e => e.id !== empId);
       setStored(KEY_EMPLOYEES, employees);
+      immediateCloudSync();
       renderEmployeeListModal();
       renderAttendancePage();
       showToast('Karyawan telah dihapus.', 'info');
@@ -5586,54 +5677,97 @@ Matur Suksma!`;
     }
 
     function saveClosingRecord() {
+      const actualInputEl = document.getElementById('closingActualCash');
+      const rawActualVal = actualInputEl ? actualInputEl.value.trim() : '';
+      if (rawActualVal === '') {
+        showToast('Mohon isi nominal Hitungan Uang Fisik Kasir di laci terlebih dahulu!', 'error');
+        if (actualInputEl) actualInputEl.focus();
+        return;
+      }
+
       const starting = Number(document.getElementById('closingStartingCash')?.value || 0);
-      const actual = Number(document.getElementById('closingActualCash')?.value || 0);
+      const actual = Number(rawActualVal || 0);
       const notes = document.getElementById('closingNotes')?.value.trim() || '-';
 
       const todayStr = getLocalDateString(new Date());
-      const sysCash = transactions
-        .filter(t => getLocalDateString(t.date) === todayStr && t.method === 'CASH')
-        .reduce((sum, t) => sum + Number(t.total || 0), 0);
+      const todayTrx = transactions.filter(t => getLocalDateString(t.date) === todayStr);
+
+      let sysCash = 0, sysQris = 0;
+      todayTrx.forEach(t => {
+        if (t.method === 'CASH') sysCash += Number(t.total || 0);
+        if (t.method === 'QRIS') sysQris += Number(t.total || 0);
+      });
 
       const todayExpKasir = expenses
-        .filter(e => (e.date || '').slice(0, 10) === todayStr && e.category === 'KASIR')
+        .filter(e => getLocalDateString(e.date) === todayStr && e.category === 'KASIR')
         .reduce((sum, e) => sum + Number(e.amount || 0), 0);
 
       const expected = starting + sysCash - todayExpKasir;
+      const diff = actual - expected;
 
       const record = {
-        id: 'CLS-' + Date.now().toString().slice(-6),
+        id: 'CLS-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
         date: todayStr,
+        timestamp: new Date().toISOString(),
         cashierName: currentUser ? currentUser.name : 'Kasir',
         startingCash: starting,
         cashSales: sysCash,
+        qrisSales: sysQris,
+        kasirExpenses: todayExpKasir,
         actualCash: actual,
         expectedCash: expected,
-        difference: actual - expected,
+        difference: diff,
         notes: notes
       };
 
+      if (!Array.isArray(closings)) closings = [];
       closings.push(record);
       setStored(KEY_CLOSINGS, closings);
+      immediateCloudSync();
+      syncClosingToWebhook(record);
+
+      if (actualInputEl) actualInputEl.value = '';
+      const notesEl = document.getElementById('closingNotes');
+      if (notesEl) notesEl.value = '';
+
+      calculateClosingDiff();
       renderClosingHistory();
-      showToast('Tutup kasir harian berhasil disimpan!', 'success');
+      showToast('✅ Rekap tutup kasir harian berhasil disimpan ke Database Cloud!', 'success');
     }
 
     function renderClosingHistory() {
       const body = document.getElementById('closingHistoryBody');
       if (!body) return;
 
+      closings = cleanDatasetArray(closings, 'id');
+
       if (closings.length === 0) {
         body.innerHTML = `<tr><td colspan="5" class="p-4 text-center text-slate-500">Belum ada riwayat tutup kasir.</td></tr>`;
         return;
       }
 
-      body.innerHTML = closings.slice().reverse().map(c => `
+      const sortedClosings = closings.slice().sort((a, b) => {
+        const tA = a.timestamp || a.date || '';
+        const tB = b.timestamp || b.date || '';
+        return tB.localeCompare(tA);
+      });
+
+      body.innerHTML = sortedClosings.map(c => {
+        const diffVal = Number(c.difference || 0);
+        const diffColor = diffVal < 0 ? 'text-rose-400 font-bold' : (diffVal > 0 ? 'text-blue-400 font-bold' : 'text-emerald-400 font-bold');
+        const diffPrefix = diffVal > 0 ? '+' : '';
+        return `
         <tr class="hover:bg-slate-800/40">
-          <td class="p-3 text-slate-400 whitespace-nowrap">${c.date}</td>
-          <td class="p-3 text-white font-bold whitespace-nowrap">${c.cashierName}</td>
-          <td class="p-3 text-emerald-400 font-mono whitespace-nowrap">${formatRupiah(c.actualCash)}</td>
-          <td class="p-3 font-mono whitespace-nowrap ${c.difference < 0 ? 'text-rose-400' : 'text-slate-300'}">${formatRupiah(c.difference)}</td>
+          <td class="p-3 text-slate-400 whitespace-nowrap">
+            <span class="block text-white font-semibold">${c.date || '-'}</span>
+            <span class="block text-[10px] text-slate-500">${c.notes && c.notes !== '-' ? c.notes : 'Shift terkunci'}</span>
+          </td>
+          <td class="p-3 text-white font-bold whitespace-nowrap">${c.cashierName || 'Kasir'}</td>
+          <td class="p-3 text-emerald-400 font-mono whitespace-nowrap">
+            <span class="block font-bold">${formatRupiah(c.actualCash)}</span>
+            <span class="block text-[10px] text-slate-500">Sistem: ${formatRupiah(c.expectedCash)}</span>
+          </td>
+          <td class="p-3 font-mono whitespace-nowrap ${diffColor}">${diffPrefix}${formatRupiah(diffVal)}</td>
           <td class="p-3 text-center whitespace-nowrap">
             <button type="button" onclick="deleteClosingRecord('${c.id}')" title="Hapus Riwayat Tutup Kasir" class="p-1.5 rounded-lg bg-rose-950/40 hover:bg-rose-900/70 text-rose-400 transition-all inline-flex items-center gap-1 text-[11px]">
               <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
@@ -5641,7 +5775,7 @@ Matur Suksma!`;
             </button>
           </td>
         </tr>
-      `).join('');
+      `}).join('');
 
       try { lucide.createIcons(); } catch (e) {}
     }
@@ -5663,11 +5797,12 @@ Matur Suksma!`;
         return;
       }
 
+      markRecordDeleted(closingId);
       closings.splice(closingIndex, 1);
       setStored(KEY_CLOSINGS, closings);
       immediateCloudSync(); // Sinkronisasi instan ke Cloud agar permanen
       renderClosingHistory();
-      showToast(`Catatan tutup kasir (${target.date}) berhasil dihapus.`, 'success');
+      showToast(`Catatan tutup kasir (${target.date}) berhasil dihapus permanen.`, 'success');
     }
 
     // ==========================================
@@ -5935,8 +6070,10 @@ Matur Suksma!`;
         showToast('Akses ditolak! Hanya Administrator yang berhak menghapus barang inventori.', 'error');
         return;
       }
+      markRecordDeleted(id);
       products = products.filter(p => p.id !== id);
       setStored(KEY_PRODUCTS, products);
+      immediateCloudSync();
       renderInventoryTable();
       renderPosCatalog();
       showToast('Barang berhasil dihapus.', 'info');
@@ -6060,6 +6197,29 @@ Matur Suksma!`;
       }
     }
 
+    let hasPendingLocalWriteBeforeCloudReady = false;
+
+    function buildCompleteCloudSyncPayload(lastSyncKey = 'MANUAL_OR_IMMEDIATE') {
+      return {
+        lastSyncAt: new Date().toISOString(),
+        lastSyncKey: lastSyncKey,
+        deletedIds: deletedIds,
+        products: cleanDatasetArray(products, 'id'),
+        transactions: cleanDatasetArray(transactions, 'id'),
+        bookings: cleanDatasetArray(bookings, 'bookingId'),
+        bons: cleanDatasetArray(bons, 'id'),
+        expenses: cleanDatasetArray(expenses, 'id'),
+        attendance: cleanDatasetArray(attendance, 'id'),
+        employees: cleanDatasetArray(employees, 'id'),
+        closings: cleanDatasetArray(closings, 'id'),
+        users: users,
+        rates: rentalRates,
+        qrisUrl: customQrisUrl,
+        qrisPayload: customQrisPayload,
+        webhookUrl: savedWebhookUrl || getStored(KEY_WEBHOOK, '')
+      };
+    }
+
     async function initAutoFirebaseIntegration() {
       if (!window.FB_SDK) return;
       try {
@@ -6081,8 +6241,14 @@ Matur Suksma!`;
         isCloudReady = true;
         updateCloudSyncStatus('ONLINE', 'Cloud Aktif');
 
-        // Otomatis tarik data terbaru dari cloud jika ada
+        // Tarik & gabungkan data terbaru dari cloud (tanpa menimpa data lokal yang baru disimpan)
         await pullLatestDataFromFirebaseCloud();
+
+        // Jika ada penyimpanan lokal saat cloud baru terhubung, dorong ke cloud sekarang
+        if (hasPendingLocalWriteBeforeCloudReady) {
+          hasPendingLocalWriteBeforeCloudReady = false;
+          await immediateCloudSync();
+        }
       } catch (err) {
         console.warn('Auto Firebase initialization failed, running in local-first mode:', err);
         updateCloudSyncStatus('ERROR', 'Offline (Lokal)');
@@ -6099,38 +6265,54 @@ Matur Suksma!`;
           const cloudData = snap.data();
           let hasUpdates = false;
 
-          if (cloudData.products && Array.isArray(cloudData.products) && cloudData.products.length > 0) {
-            products = cloudData.products;
+          // 1. Gabungkan daftar ID yang telah dihapus (deletedIds) terlebih dahulu agar data terhapus & dummy tidak pernah muncul lagi
+          if (Array.isArray(cloudData.deletedIds)) {
+            cloudData.deletedIds.forEach(dId => markRecordDeleted(dId));
+          }
+
+          // 2. Gabungkan masing-masing koleksi menggunakan mergeUniqueById (Data lokal baru tidak hilang + Data dummy/terhapus dibersihkan)
+          if (Array.isArray(cloudData.products) && cloudData.products.length > 0) {
+            products = mergeUniqueById(products, cloudData.products, 'id');
             localStorage.setItem(KEY_PRODUCTS, JSON.stringify(products));
             hasUpdates = true;
           }
-          if (cloudData.transactions && Array.isArray(cloudData.transactions)) {
-            transactions = cloudData.transactions;
+          if (Array.isArray(cloudData.transactions)) {
+            transactions = mergeUniqueById(transactions, cloudData.transactions, 'id');
             localStorage.setItem(KEY_TRANSACTIONS, JSON.stringify(transactions));
             hasUpdates = true;
           }
-          if (cloudData.bookings && Array.isArray(cloudData.bookings)) {
-            bookings = cloudData.bookings;
+          if (Array.isArray(cloudData.bookings)) {
+            bookings = mergeUniqueById(bookings, cloudData.bookings, 'bookingId');
             localStorage.setItem(KEY_BOOKINGS, JSON.stringify(bookings));
             hasUpdates = true;
           }
-          if (cloudData.bons && Array.isArray(cloudData.bons)) {
-            bons = cloudData.bons;
+          if (Array.isArray(cloudData.bons)) {
+            bons = mergeUniqueById(bons, cloudData.bons, 'id');
             localStorage.setItem(KEY_BONS, JSON.stringify(bons));
             hasUpdates = true;
           }
-          if (cloudData.expenses && Array.isArray(cloudData.expenses)) {
-            expenses = cloudData.expenses;
+          if (Array.isArray(cloudData.expenses)) {
+            expenses = mergeUniqueById(expenses, cloudData.expenses, 'id');
             localStorage.setItem(KEY_EXPENSES, JSON.stringify(expenses));
             hasUpdates = true;
           }
-          if (cloudData.attendance && Array.isArray(cloudData.attendance)) {
-            attendance = cloudData.attendance;
+          if (Array.isArray(cloudData.attendance)) {
+            attendance = mergeUniqueById(attendance, cloudData.attendance, 'id');
             localStorage.setItem(KEY_ATTENDANCE, JSON.stringify(attendance));
             hasUpdates = true;
           }
-          if (cloudData.users && Array.isArray(cloudData.users) && cloudData.users.length > 0) {
-            users = cloudData.users;
+          if (Array.isArray(cloudData.employees) && cloudData.employees.length > 0) {
+            employees = mergeUniqueById(employees, cloudData.employees, 'id');
+            localStorage.setItem(KEY_EMPLOYEES, JSON.stringify(employees));
+            hasUpdates = true;
+          }
+          if (Array.isArray(cloudData.closings)) {
+            closings = mergeUniqueById(closings, cloudData.closings, 'id');
+            localStorage.setItem(KEY_CLOSINGS, JSON.stringify(closings));
+            hasUpdates = true;
+          }
+          if (Array.isArray(cloudData.users) && cloudData.users.length > 0) {
+            users = mergeUniqueById(users, cloudData.users, 'id');
             localStorage.setItem(KEY_USERS, JSON.stringify(users));
             hasUpdates = true;
           }
@@ -6142,7 +6324,7 @@ Matur Suksma!`;
             customQrisUrl = cloudData.qrisUrl;
             localStorage.setItem(KEY_QRIS, JSON.stringify(customQrisUrl));
           }
-          if (typeof cloudData.qrisPayload === 'string') {
+          if (typeof cloudData.qrisPayload === 'string' && cloudData.qrisPayload) {
             customQrisPayload = cloudData.qrisPayload;
             localStorage.setItem(KEY_QRIS_PAYLOAD, JSON.stringify(customQrisPayload));
           }
@@ -6151,16 +6333,23 @@ Matur Suksma!`;
             localStorage.setItem(KEY_WEBHOOK, JSON.stringify(savedWebhookUrl));
             const webhookInput = document.getElementById('sheetWebhookUrl');
             if (webhookInput) webhookInput.value = savedWebhookUrl;
-          } else if (savedWebhookUrl) {
-            // Jika di cloud belum ada tapi di perangkat lokal sudah ada, otomatis upload ke cloud
-            window.FB_SDK.setDoc(syncRef, { webhookUrl: savedWebhookUrl }, { merge: true });
           }
 
+          // Dorong kembali hasil bersih (tanpa dummy) ke Firebase Cloud
+          await window.FB_SDK.setDoc(syncRef, buildCompleteCloudSyncPayload('CLEAN_MERGE'), { merge: true });
+
           if (hasUpdates) {
-            // Render ulang tampilan aktif jika ada pembaruan dari cloud
+            // Render ulang seluruh tampilan tabel dan halaman aktif
             renderDashboard();
             renderPosCatalog();
             updateBonBadge();
+            renderAttendancePage();
+            renderClosingDashboard();
+            renderClosingHistory();
+            renderBookingList();
+            renderBonTable();
+            renderExpenseTable();
+            renderInventoryTable();
           }
         } else {
           // Inisialisasi awal ke cloud jika dokumen belum ada
@@ -6173,31 +6362,26 @@ Matur Suksma!`;
 
     // Fungsi untuk langsung melakukan sinkronisasi instan ke Firebase Cloud tanpa menunggu debounce
     async function immediateCloudSync() {
-      if (!isCloudReady || !window.FB_SDK || !fbDb) return;
+      if (!isCloudReady || !window.FB_SDK || !fbDb) {
+        hasPendingLocalWriteBeforeCloudReady = true;
+        return;
+      }
       try {
+        updateCloudSyncStatus('SYNCING', 'Menyimpan...');
         const syncRef = window.FB_SDK.doc(fbDb, 'cloud_sync', 'singaraja_soccerfield_data');
-        await window.FB_SDK.setDoc(syncRef, {
-          lastSyncAt: new Date().toISOString(),
-          products: products,
-          transactions: transactions,
-          bookings: bookings,
-          bons: bons,
-          expenses: expenses,
-          attendance: attendance,
-          closings: closings,
-          users: users,
-          rates: rentalRates,
-          qrisUrl: customQrisUrl,
-          qrisPayload: customQrisPayload,
-          webhookUrl: savedWebhookUrl || getStored(KEY_WEBHOOK, '')
-        }, { merge: true });
+        await window.FB_SDK.setDoc(syncRef, buildCompleteCloudSyncPayload('IMMEDIATE'), { merge: true });
+        updateCloudSyncStatus('ONLINE', 'Cloud Sinkron');
       } catch (e) {
         console.warn('Immediate cloud sync error:', e);
+        updateCloudSyncStatus('ERROR', 'Gagal Sync');
       }
     }
 
     function triggerAutoCloudSync(key, value) {
-      if (!isCloudReady || !window.FB_SDK || !fbDb) return;
+      if (!isCloudReady || !window.FB_SDK || !fbDb) {
+        hasPendingLocalWriteBeforeCloudReady = true;
+        return;
+      }
 
       // Debounce agar tidak melakukan write berlebihan dalam milidetik yang sama
       clearTimeout(cloudSyncDebounceTimer);
@@ -6206,28 +6390,13 @@ Matur Suksma!`;
       cloudSyncDebounceTimer = setTimeout(async () => {
         try {
           const syncRef = window.FB_SDK.doc(fbDb, 'cloud_sync', 'singaraja_soccerfield_data');
-          await window.FB_SDK.setDoc(syncRef, {
-            lastSyncAt: new Date().toISOString(),
-            lastSyncKey: key,
-            products: products,
-            transactions: transactions,
-            bookings: bookings,
-            bons: bons,
-            expenses: expenses,
-            attendance: attendance,
-            closings: closings,
-            users: users,
-            rates: rentalRates,
-            qrisUrl: customQrisUrl,
-            webhookUrl: savedWebhookUrl || getStored(KEY_WEBHOOK, '')
-          }, { merge: true });
-
+          await window.FB_SDK.setDoc(syncRef, buildCompleteCloudSyncPayload(key), { merge: true });
           updateCloudSyncStatus('ONLINE', 'Cloud Sinkron');
         } catch (e) {
           console.warn('Auto cloud sync failed:', e);
           updateCloudSyncStatus('ERROR', 'Gagal Sync');
         }
-      }, 1000);
+      }, 600);
     }
 
     // ==========================================
@@ -6419,21 +6588,7 @@ Matur Suksma!`;
         }
 
         const syncRef = window.FB_SDK.doc(client.fbDb, 'cloud_sync', 'singaraja_soccerfield_data');
-        await window.FB_SDK.setDoc(syncRef, {
-          lastSyncAt: new Date().toISOString(),
-          products: products,
-          transactions: transactions,
-          bookings: bookings,
-          bons: bons,
-          expenses: expenses,
-          attendance: attendance,
-          closings: closings,
-          users: users,
-          rates: rentalRates,
-          qrisUrl: customQrisUrl,
-          qrisPayload: customQrisPayload,
-          webhookUrl: savedWebhookUrl || getStored(KEY_WEBHOOK, '')
-        }, { merge: true });
+        await window.FB_SDK.setDoc(syncRef, buildCompleteCloudSyncPayload('MANUAL_SYNC_ALL'), { merge: true });
 
         showToast('✅ Seluruh data berhasil dicadangkan ke Firebase Cloud!', 'success');
       } catch (e) {
@@ -6613,6 +6768,36 @@ Matur Suksma!`;
       }).catch(err => console.warn('Webhook sync error:', err));
     }
 
+    function syncAttendanceToWebhook(att) {
+      const url = savedWebhookUrl || getStored(KEY_WEBHOOK, '');
+      if (!url || !att) return;
+
+      fetch(url, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'ATTENDANCE',
+          payload: att
+        })
+      }).catch(err => console.warn('Webhook attendance sync error:', err));
+    }
+
+    function syncClosingToWebhook(closingRec) {
+      const url = savedWebhookUrl || getStored(KEY_WEBHOOK, '');
+      if (!url || !closingRec) return;
+
+      fetch(url, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'CLOSING',
+          payload: closingRec
+        })
+      }).catch(err => console.warn('Webhook closing sync error:', err));
+    }
+
     function downloadAppsScriptCode() {
       const scriptCode = `function doPost(e) {
   var lock = LockService.getScriptLock();
@@ -6642,13 +6827,20 @@ Matur Suksma!`;
       })).setMimeType(ContentService.MimeType.JSON);
     }
 
-    // 2. FITUR PENCATATAN TRANSAKSI PENJUALAN KASIR
+    // 2. FITUR PENCATATAN KE GOOGLE SPREADSHEET
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     setupSheets(ss);
-    var sheet = ss.getSheetByName("Penjualan_Kasir");
+    var p = data.payload || data;
+
     if (data.type === "SALE") {
-      var p = data.payload || data;
-      sheet.appendRow([new Date(), p.receiptNo, p.date, p.cashierName, JSON.stringify(p.items), p.totalAmount, p.paymentMethod]);
+      var sheetSale = ss.getSheetByName("Penjualan_Kasir");
+      sheetSale.appendRow([new Date(), p.receiptNo, p.date, p.cashierName, JSON.stringify(p.items), p.totalAmount, p.paymentMethod]);
+    } else if (data.type === "ATTENDANCE") {
+      var sheetAtt = ss.getSheetByName("Absensi_Karyawan");
+      sheetAtt.appendRow([new Date(), p.id, p.date, p.employeeName, p.role, p.timeIn, p.timeOut, p.status, p.kasbonAmount, p.kasbonReason]);
+    } else if (data.type === "CLOSING") {
+      var sheetCls = ss.getSheetByName("Tutup_Kasir");
+      sheetCls.appendRow([new Date(), p.id, p.date, p.cashierName, p.startingCash, p.cashSales, p.qrisSales || 0, p.kasirExpenses || 0, p.expectedCash, p.actualCash, p.difference, p.notes]);
     }
 
     return ContentService.createTextOutput(JSON.stringify({status: "success"})).setMimeType(ContentService.MimeType.JSON);
@@ -6660,8 +6852,16 @@ Matur Suksma!`;
 }
 function setupSheets(ss) {
   if (!ss.getSheetByName("Penjualan_Kasir")) {
-    var sh = ss.insertSheet("Penjualan_Kasir");
-    sh.appendRow(["Timestamp", "No Nota", "Tanggal", "Kasir", "Items", "Total", "Metode"]);
+    var sh1 = ss.insertSheet("Penjualan_Kasir");
+    sh1.appendRow(["Timestamp", "No Nota", "Tanggal", "Kasir", "Items", "Total", "Metode"]);
+  }
+  if (!ss.getSheetByName("Absensi_Karyawan")) {
+    var sh2 = ss.insertSheet("Absensi_Karyawan");
+    sh2.appendRow(["Timestamp", "ID Absensi", "Tanggal", "Nama Karyawan", "Jabatan", "Jam Masuk", "Jam Pulang", "Status", "Kasbon (Rp)", "Keperluan Kasbon"]);
+  }
+  if (!ss.getSheetByName("Tutup_Kasir")) {
+    var sh3 = ss.insertSheet("Tutup_Kasir");
+    sh3.appendRow(["Timestamp", "ID Closing", "Tanggal", "Kasir", "Modal Awal", "Penjualan Cash", "Penjualan QRIS", "Pengeluaran Kasir", "Kas Sistem", "Uang Fisik", "Selisih", "Catatan"]);
   }
 }`;
       const blob = new Blob([scriptCode], { type: 'text/javascript' });
