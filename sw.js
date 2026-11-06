@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ssf-pos-pwa-v11';
+const CACHE_NAME = 'ssf-pos-pwa-v13';
 const CORE_ASSETS = [
   './',
   './index.html',
@@ -38,7 +38,6 @@ self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
 
   const url = new URL(event.request.url);
-  // Skip caching for Firebase / Google Apps Script dynamic API endpoints
   if (
     url.hostname.includes('firestore.googleapis.com') ||
     url.hostname.includes('identitytoolkit.googleapis.com') ||
@@ -48,28 +47,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Gunakan Network-First untuk halaman HTML agar perbaikan kode langsung ter-update
-  if (event.request.mode === 'navigate' || url.pathname.endsWith('.html') || url.pathname.endsWith('/')) {
-    event.respondWith(
-      fetch(event.request)
-        .then((networkResponse) => {
-          if (networkResponse && networkResponse.status === 200) {
-            const responseClone = networkResponse.clone();
-            caches.open(CACHE_NAME).then((cache) => {
-              cache.put(event.request, responseClone);
-            });
-          }
-          return networkResponse;
-        })
-        .catch(() => {
-          return caches.match(event.request).then((cachedResponse) => {
-            return cachedResponse || caches.match('./index.html');
-          });
-        })
-    );
-    return;
-  }
-
+  // Network-First strategy so updates to index.html are always loaded fresh
   event.respondWith(
     fetch(event.request)
       .then((networkResponse) => {
