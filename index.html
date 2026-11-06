@@ -2366,6 +2366,7 @@
     let closings = getStored(KEY_CLOSINGS, []);
     let rentalRates = getStored(KEY_RATES, defaultRates);
     let customQrisUrl = getStored(KEY_QRIS, DEFAULT_QRIS);
+    let savedWebhookUrl = getStored(KEY_WEBHOOK, '');
     let firebaseConfig = getStored(KEY_FIREBASE, OFFICIAL_FIREBASE_CONFIG);
 
     // Chart.js Global Instances
@@ -4909,7 +4910,7 @@ Matur Suksma!`;
       const file = e.target.files[0];
       if (!file) return;
 
-      const webhookUrl = getStored(KEY_WEBHOOK, '');
+      const webhookUrl = savedWebhookUrl || getStored(KEY_WEBHOOK, '');
       const previewImg = document.getElementById('productPreviewImg');
 
       // KUNCI TOMBOL SIMPAN BARANG
@@ -5261,6 +5262,15 @@ Matur Suksma!`;
             customQrisUrl = cloudData.qrisUrl;
             localStorage.setItem(KEY_QRIS, JSON.stringify(customQrisUrl));
           }
+          if (cloudData.webhookUrl) {
+            savedWebhookUrl = cloudData.webhookUrl;
+            localStorage.setItem(KEY_WEBHOOK, JSON.stringify(savedWebhookUrl));
+            const webhookInput = document.getElementById('sheetWebhookUrl');
+            if (webhookInput) webhookInput.value = savedWebhookUrl;
+          } else if (savedWebhookUrl) {
+            // Jika di cloud belum ada tapi di perangkat lokal sudah ada, otomatis upload ke cloud
+            window.FB_SDK.setDoc(syncRef, { webhookUrl: savedWebhookUrl }, { merge: true });
+          }
 
           if (hasUpdates) {
             // Render ulang tampilan aktif jika ada pembaruan dari cloud
@@ -5299,7 +5309,8 @@ Matur Suksma!`;
             closings: closings,
             users: users,
             rates: rentalRates,
-            qrisUrl: customQrisUrl
+            qrisUrl: customQrisUrl,
+            webhookUrl: savedWebhookUrl || getStored(KEY_WEBHOOK, '')
           }, { merge: true });
 
           updateCloudSyncStatus('ONLINE', 'Cloud Sinkron');
@@ -5318,7 +5329,7 @@ Matur Suksma!`;
       if (qrisImg) qrisImg.src = customQrisUrl || DEFAULT_QRIS;
 
       const webhookInput = document.getElementById('sheetWebhookUrl');
-      if (webhookInput) webhookInput.value = getStored(KEY_WEBHOOK, '');
+      if (webhookInput) webhookInput.value = savedWebhookUrl || getStored(KEY_WEBHOOK, '');
 
       // Load data Firebase tersimpan
       const fbConfig = getStored(KEY_FIREBASE, OFFICIAL_FIREBASE_CONFIG);
@@ -5486,8 +5497,12 @@ Matur Suksma!`;
           bons: bons,
           expenses: expenses,
           attendance: attendance,
-          users: users
-        });
+          closings: closings,
+          users: users,
+          rates: rentalRates,
+          qrisUrl: customQrisUrl,
+          webhookUrl: savedWebhookUrl || getStored(KEY_WEBHOOK, '')
+        }, { merge: true });
 
         showToast('✅ Seluruh data berhasil dicadangkan ke Firebase Cloud!', 'success');
       } catch (e) {
@@ -5541,14 +5556,32 @@ Matur Suksma!`;
       showToast('QRIS dikembalikan ke default.', 'info');
     }
 
-    function saveWebhookUrl() {
+    async function saveWebhookUrl() {
       const url = document.getElementById('sheetWebhookUrl')?.value.trim();
+      savedWebhookUrl = url;
       setStored(KEY_WEBHOOK, url);
-      showToast('Webhook URL berhasil disimpan!', 'success');
+
+      // Simpan langsung dan permanen ke Firebase Cloud Firestore agar otomatis muncul di semua perangkat lain
+      if (isCloudReady && window.FB_SDK && fbDb) {
+        try {
+          updateCloudSyncStatus('SYNCING', 'Menyimpan Webhook...');
+          const syncRef = window.FB_SDK.doc(fbDb, 'cloud_sync', 'singaraja_soccerfield_data');
+          await window.FB_SDK.setDoc(syncRef, {
+            webhookUrl: url,
+            lastSyncAt: new Date().toISOString()
+          }, { merge: true });
+          updateCloudSyncStatus('ONLINE', 'Cloud Sinkron');
+          showToast('✅ Webhook URL berhasil disimpan permanen ke Cloud untuk semua perangkat!', 'success');
+          return;
+        } catch (e) {
+          console.warn('Gagal simpan langsung webhook ke cloud:', e);
+        }
+      }
+      showToast('Webhook URL berhasil disimpan di perangkat ini!', 'success');
     }
 
     function testWebhookConnection() {
-      const url = getStored(KEY_WEBHOOK, '');
+      const url = savedWebhookUrl || getStored(KEY_WEBHOOK, '');
       if (!url) {
         showToast('Masukkan URL Webhook Google Apps Script terlebih dahulu!', 'error');
         return;
@@ -5567,7 +5600,7 @@ Matur Suksma!`;
     }
 
     function syncSaleToWebhook(trx) {
-      const url = getStored(KEY_WEBHOOK, '');
+      const url = savedWebhookUrl || getStored(KEY_WEBHOOK, '');
       if (!url) return;
 
       fetch(url, {
