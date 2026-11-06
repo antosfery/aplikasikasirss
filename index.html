@@ -267,7 +267,7 @@
             </div>
 
             <!-- Bluetooth 58mm Printer Status / Connect Button -->
-            <button type="button" id="btPrinterBadge" onclick="openBtPrinterModal()" class="flex items-center gap-1.5 text-[11px] font-semibold text-slate-300 bg-slate-950/60 hover:bg-slate-800 border border-slate-800 px-2.5 py-1.5 rounded-xl transition-all" title="Pengaturan & Koneksi Printer Bluetooth 58mm">
+            <button type="button" id="btPrinterBadge" onclick="connectBluetoothPrinterManual()" class="flex items-center gap-1.5 text-[11px] font-semibold text-slate-300 bg-slate-950/60 hover:bg-slate-800 border border-slate-800 px-2.5 py-1.5 rounded-xl transition-all" title="Klik untuk menghubungkan Printer Bluetooth 58mm">
               <span id="btPrinterDot" class="w-2 h-2 rounded-full bg-slate-500"></span>
               <i data-lucide="bluetooth" class="w-3.5 h-3.5 text-blue-400"></i>
               <span id="btPrinterText" class="font-mono text-slate-300 hidden xs:inline">BT 58mm</span>
@@ -1724,13 +1724,9 @@
             <span>Metode:</span>
             <span id="succPaymentMethod" class="font-bold text-white">-</span>
           </div>
-          <div class="flex justify-between items-center pt-1.5 mt-1.5 border-t border-slate-800/80">
-            <span class="text-slate-400">Status Printer BT:</span>
-            <span id="succBtStatusLabel" class="font-mono text-[11px] text-amber-400 font-semibold">Pilih saat cetak</span>
-          </div>
         </div>
       </div>
-      <div class="grid grid-cols-2 gap-2 pt-1">
+      <div class="grid grid-cols-2 gap-2 pt-2">
         <button type="button" onclick="closePaymentSuccessModal()" class="py-3 px-4 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5">
           <i data-lucide="x" class="w-4 h-4"></i>
           <span>Keluar</span>
@@ -1740,89 +1736,10 @@
           <span>Cetak Nota (BT)</span>
         </button>
       </div>
-      <div class="grid grid-cols-2 gap-2">
-        <button type="button" onclick="openBtPrinterModal(lastCompletedTransaction)" class="py-2 px-2.5 bg-slate-950 hover:bg-slate-800 text-blue-400 border border-slate-800 rounded-xl text-[11px] font-semibold transition-all flex items-center justify-center gap-1">
-          <i data-lucide="settings" class="w-3.5 h-3.5"></i>
-          <span>Pilih / Atur Printer</span>
-        </button>
-        <button type="button" onclick="printReceiptBrowserFallback()" class="py-2 px-2.5 bg-slate-950 hover:bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-800 rounded-xl text-[11px] font-semibold transition-all flex items-center justify-center gap-1">
-          <i data-lucide="printer" class="w-3.5 h-3.5"></i>
-          <span>Cetak Sistem/USB</span>
-        </button>
-      </div>
-    </div>
-  </div>
-
-  <!-- MODAL: PENGATURAN & PEMILIHAN PRINTER BLUETOOTH 58MM -->
-  <div id="btPrinterModal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/85 backdrop-blur-sm p-4 hidden overflow-y-auto">
-    <div class="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-md p-6 shadow-2xl space-y-4 my-auto">
-      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
-        <div class="flex items-center gap-2">
-          <div class="w-9 h-9 rounded-xl bg-blue-500/10 text-blue-400 flex items-center justify-center border border-blue-500/20">
-            <i data-lucide="bluetooth" class="w-5 h-5"></i>
-          </div>
-          <div>
-            <h3 class="font-bold text-white text-base">Printer Bluetooth 58mm</h3>
-            <p class="text-[11px] text-slate-400">Koneksi Langsung ESC/POS & Pemilihan Perangkat</p>
-          </div>
-        </div>
-        <button type="button" onclick="closeModal('btPrinterModal')" class="text-slate-400 hover:text-white p-1">
-          <i data-lucide="x" class="w-5 h-5"></i>
-        </button>
-      </div>
-
-      <!-- Status Koneksi Saat Ini -->
-      <div class="p-3.5 bg-slate-950 rounded-2xl border border-slate-800 flex items-center justify-between text-xs">
-        <div>
-          <span class="text-slate-400 block text-[11px]">Perangkat Terhubung:</span>
-          <span id="btModalDeviceName" class="font-mono font-bold text-white text-sm">Belum ada printer dipilih</span>
-        </div>
-        <span id="btModalStatusBadge" class="px-2.5 py-1 rounded-full text-[10px] font-black uppercase bg-slate-800 text-slate-400 border border-slate-700">TERPUTUS</span>
-      </div>
-
-      <!-- Kotak Diagnostik / Info jika Pop-up Gagal Muncul -->
-      <div id="btDiagAlert" class="hidden p-3.5 rounded-2xl bg-amber-950/50 border border-amber-500/40 text-amber-200 text-xs space-y-1.5">
-        <div class="font-bold text-amber-400 flex items-center gap-1.5">
-          <i data-lucide="alert-triangle" class="w-4 h-4 flex-shrink-0"></i>
-          <span id="btDiagTitle">Info Pemindaian Bluetooth</span>
-        </div>
-        <p id="btDiagMessage" class="text-[11px] text-amber-200/90 leading-relaxed"></p>
-      </div>
-
-      <!-- Tombol Utama Scan & Munculkan Pop-up Bluetooth -->
-      <div class="space-y-2">
-        <button type="button" onclick="pairAndPrintBluetoothNow()" class="w-full py-3.5 px-4 bg-gradient-to-r from-blue-600 to-emerald-600 hover:from-blue-500 hover:to-emerald-500 text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-blue-600/20 flex items-center justify-center gap-2">
-          <i data-lucide="search" class="w-4 h-4"></i>
-          <span id="btnPairBtNowLabel">Scan & Pilih Printer Bluetooth (Munculkan Pop-up)</span>
-        </button>
-
-        <div class="grid grid-cols-2 gap-2">
-          <button type="button" onclick="testBluetoothPrint58mm()" class="py-2.5 px-3 bg-slate-800 hover:bg-slate-700 text-emerald-400 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 border border-slate-700">
-            <i data-lucide="printer" class="w-3.5 h-3.5"></i>
-            <span>Tes Cetak 58mm</span>
-          </button>
-          <button type="button" onclick="disconnectBluetoothPrinter()" class="py-2.5 px-3 bg-slate-800 hover:bg-rose-950/60 text-slate-300 hover:text-rose-300 rounded-xl text-xs font-semibold transition-all flex items-center justify-center gap-1.5 border border-slate-700">
-            <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
-            <span>Reset / Ganti Printer</span>
-          </button>
-        </div>
-      </div>
-
-      <!-- Pilihan Mode Cetak Default (Solusi untuk Semua Jenis HP / APK / Printer) -->
-      <div class="border-t border-slate-800 pt-3 space-y-2 text-xs">
-        <label class="text-slate-300 font-bold block">Metode Cetak Otomatis Saat Klik "Cetak Nota":</label>
-        <select id="btPrintModeSelect" onchange="saveBtPrintMode(this.value)" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-white font-semibold focus:outline-none focus:border-emerald-500">
-          <option value="BLE_DIRECT">1. Web Bluetooth Langsung (Pop-up Chrome / PWA - Tanpa Aplikasi)</option>
-          <option value="SYSTEM_PRINT">2. Layanan Cetak Sistem Android / Bluetooth Terpasang (window.print)</option>
-          <option value="RAWBT_INTENT">3. Jalur Bluetooth Classic SPP / APK WebView Bridge (Intent ESC/POS)</option>
-        </select>
-        <div class="p-3 bg-slate-950/90 rounded-xl border border-slate-800/80 text-[11px] text-slate-400 space-y-1 leading-relaxed">
-          <p class="font-bold text-slate-200">💡 Mengapa Pop-up Bluetooth Tidak Muncul?</p>
-          <p>1. Wajib menyalakan <b>Bluetooth</b> DAN <b>Lokasi (GPS)</b> di HP Android (syarat wajib Android untuk memindai printer BLE).</p>
-          <p>2. Izinkan akses <b>Perangkat Terdekat (Nearby Devices)</b> & <b>Lokasi</b> pada pengaturan aplikasi browser Chrome.</p>
-          <p>3. Jika Anda menginstal file <b>.APK hasil WebView</b> yang memblokir pop-up Chrome, buka aplikasi melalui <b>Chrome</b> lalu klik tombol <b>"Install Aplikasi di Perangkat Ini"</b>, atau ubah metode di atas ke <b>Nomor 2 / Nomor 3</b>.</p>
-        </div>
-      </div>
+      <button type="button" onclick="printReceiptBrowserFallback()" class="w-full py-2 bg-slate-950 hover:bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-800 rounded-xl text-[11px] font-semibold transition-all flex items-center justify-center gap-1.5">
+        <i data-lucide="printer" class="w-3.5 h-3.5"></i>
+        <span>Cetak via Dialog Browser / USB</span>
+      </button>
     </div>
   </div>
 
@@ -3828,7 +3745,6 @@ Matur Suksma!`;
       document.getElementById('succReceiptNo').innerText = trx.receiptNo;
       document.getElementById('succTotalAmount').innerText = formatRupiah(trx.total);
       document.getElementById('succPaymentMethod').innerText = trx.method;
-      refreshBtStatusUI();
       openModal('paymentSuccessModal');
       playPaymentSuccessVoice(trx.total);
 
@@ -3843,294 +3759,140 @@ Matur Suksma!`;
 
     // ==========================================
     // WEB BLUETOOTH DIRECT 58MM ESC/POS PRINTER
-    // (FIXED: Synchronous User Gesture Pop-up + Multi-Mode Fallback)
     // ==========================================
-    const KEY_BT_PRINT_MODE = 'ssf_bt_print_mode_v1';
-    let btPrintMode = localStorage.getItem(KEY_BT_PRINT_MODE) || 'BLE_DIRECT';
     let bluetoothPrinterDevice = null;
     let bluetoothCharacteristic = null;
     let isBtPrinting = false;
-    let pendingBtPrintTransaction = null;
 
-    // Daftar lengkap UUID Service Printer Thermal 58mm (BLE & Dual-Mode)
     const BT_PRINTER_SERVICES = [
       '000018f0-0000-1000-8000-00805f9b34fb',
+      'e7810a71-73ae-499d-8c15-faa9aef0c3f2',
+      '49535343-fe7d-4ae5-8fa9-9fafd205e455',
       '0000ff00-0000-1000-8000-00805f9b34fb',
       '0000ffe0-0000-1000-8000-00805f9b34fb',
-      '0000ffe1-0000-1000-8000-00805f9b34fb',
-      '49535343-fe7d-4ae5-8fa9-9fafd205e455',
-      'e7810a71-73ae-499d-8c15-faa9aef0c3f2',
       '6e400001-b5a3-f393-e0a9-e50e24dcca9e',
-      '0000fee7-0000-1000-8000-00805f9b34fb',
-      '0000ae30-0000-1000-8000-00805f9b34fb',
-      '0000ae00-0000-1000-8000-00805f9b34fb',
-      '0000ff10-0000-1000-8000-00805f9b34fb',
-      '00001101-0000-1000-8000-00805f9b34fb',
-      '00001800-0000-1000-8000-00805f9b34fb',
-      '00001801-0000-1000-8000-00805f9b34fb',
-      '0000180a-0000-1000-8000-00805f9b34fb'
+      '0000fee7-0000-1000-8000-00805f9b34fb'
     ];
 
-    function isBtPrinterConnected() {
-      return Boolean(
-        bluetoothPrinterDevice &&
-        bluetoothPrinterDevice.gatt &&
-        bluetoothPrinterDevice.gatt.connected &&
-        bluetoothCharacteristic
-      );
-    }
-
-    function refreshBtStatusUI() {
-      const connected = isBtPrinterConnected();
-      const devName = (bluetoothPrinterDevice && bluetoothPrinterDevice.name) ? bluetoothPrinterDevice.name : 'Printer 58mm';
-
-      // 1. Navbar Badge
+    function updateBtPrinterBadge(connected, deviceName = '') {
       const dot = document.getElementById('btPrinterDot');
       const text = document.getElementById('btPrinterText');
-      if (dot && text) {
-        if (connected) {
-          dot.className = 'w-2 h-2 rounded-full bg-emerald-400 animate-pulse';
-          text.innerText = devName.slice(0, 10);
-          text.className = 'font-mono text-emerald-400 font-bold hidden xs:inline';
-        } else {
-          dot.className = 'w-2 h-2 rounded-full bg-slate-500';
-          text.innerText = 'BT 58mm';
-          text.className = 'font-mono text-slate-300 hidden xs:inline';
-        }
+      const badge = document.getElementById('btPrinterBadge');
+      if (!dot || !text || !badge) return;
+
+      if (connected) {
+        dot.className = 'w-2 h-2 rounded-full bg-emerald-400 animate-pulse';
+        text.innerText = deviceName ? deviceName.slice(0, 10) : 'BT Aktif';
+        text.className = 'font-mono text-emerald-400 font-bold hidden xs:inline';
+        badge.border = 'border-emerald-500/40';
+      } else {
+        dot.className = 'w-2 h-2 rounded-full bg-slate-500';
+        text.innerText = 'BT 58mm';
+        text.className = 'font-mono text-slate-300 hidden xs:inline';
       }
-
-      // 2. Payment Success Modal Label
-      const succLabel = document.getElementById('succBtStatusLabel');
-      if (succLabel) {
-        if (btPrintMode === 'SYSTEM_PRINT') {
-          succLabel.innerText = 'Mode Cetak Sistem';
-          succLabel.className = 'font-mono text-[11px] text-blue-400 font-bold';
-        } else if (btPrintMode === 'RAWBT_INTENT') {
-          succLabel.innerText = 'Mode Jalur SPP/Intent';
-          succLabel.className = 'font-mono text-[11px] text-teal-400 font-bold';
-        } else if (connected) {
-          succLabel.innerText = '🟢 Terhubung (' + devName.slice(0, 14) + ')';
-          succLabel.className = 'font-mono text-[11px] text-emerald-400 font-bold';
-        } else {
-          succLabel.innerText = '⚪ Klik Cetak utk Pilih Printer';
-          succLabel.className = 'font-mono text-[11px] text-amber-400 font-semibold';
-        }
-      }
-
-      // 3. Bluetooth Modal Status
-      const modalDev = document.getElementById('btModalDeviceName');
-      const modalBadge = document.getElementById('btModalStatusBadge');
-      const modeSelect = document.getElementById('btPrintModeSelect');
-      if (modeSelect) modeSelect.value = btPrintMode;
-
-      if (modalDev && modalBadge) {
-        if (connected) {
-          modalDev.innerText = devName;
-          modalBadge.innerText = 'TERHUBUNG';
-          modalBadge.className = 'px-2.5 py-1 rounded-full text-[10px] font-black uppercase bg-emerald-500/20 text-emerald-400 border border-emerald-500/40';
-        } else {
-          modalDev.innerText = bluetoothPrinterDevice ? (devName + ' (Terputus)') : 'Belum ada printer dipilih';
-          modalBadge.innerText = 'TERPUTUS';
-          modalBadge.className = 'px-2.5 py-1 rounded-full text-[10px] font-black uppercase bg-slate-800 text-slate-400 border border-slate-700';
-        }
-      }
-    }
-
-    function saveBtPrintMode(mode) {
-      btPrintMode = mode || 'BLE_DIRECT';
-      try {
-        localStorage.setItem(KEY_BT_PRINT_MODE, btPrintMode);
-      } catch (e) {}
-      refreshBtStatusUI();
-      showToast('Metode cetak printer 58mm berhasil disimpan!', 'success');
-    }
-
-    function showBtDiagnosticAlert(title, message) {
-      const box = document.getElementById('btDiagAlert');
-      const titleEl = document.getElementById('btDiagTitle');
-      const msgEl = document.getElementById('btDiagMessage');
-      if (box && titleEl && msgEl) {
-        titleEl.innerText = title;
-        msgEl.innerHTML = message;
-        box.classList.remove('hidden');
-      }
-    }
-
-    function hideBtDiagnosticAlert() {
-      const box = document.getElementById('btDiagAlert');
-      if (box) box.classList.add('hidden');
-    }
-
-    function openBtPrinterModal(pendingTrx = null) {
-      if (pendingTrx) {
-        pendingBtPrintTransaction = pendingTrx;
-      }
-      refreshBtStatusUI();
-      const btnLabel = document.getElementById('btnPairBtNowLabel');
-      if (btnLabel) {
-        btnLabel.innerText = pendingBtPrintTransaction
-          ? 'Pilih Printer Bluetooth & Langsung Cetak Nota'
-          : 'Scan & Pilih Printer Bluetooth (Munculkan Pop-up)';
-      }
-      openModal('btPrinterModal');
-      try { lucide.createIcons(); } catch (e) {}
     }
 
     async function findWritableCharacteristic(server) {
       const services = await server.getPrimaryServices();
-      let fallbackChar = null;
-
       for (const service of services) {
-        const uuid = String(service.uuid || '').toLowerCase();
-        // Lewati Generic Access (1800) & Generic Attribute (1801) agar tidak salah menulis ke nama perangkat
-        const isGenericService = uuid.startsWith('00001800') || uuid.startsWith('00001801') || uuid.startsWith('0000180a');
-
         try {
           const characteristics = await service.getCharacteristics();
           for (const char of characteristics) {
             if (char.properties.writeWithoutResponse || char.properties.write) {
-              if (!isGenericService) {
-                return char; // Prioritaskan characteristic milik service printer ESC/POS
-              }
-              if (!fallbackChar) {
-                fallbackChar = char;
-              }
+              return char;
             }
           }
         } catch (e) {
           console.warn('Skip service:', e);
         }
       }
-      return fallbackChar;
+      return null;
     }
 
-    async function connectGattAndGetChar(device) {
-      if (!device || !device.gatt) {
-        throw new Error('Perangkat Bluetooth tidak mendukung koneksi GATT.');
+    async function ensureBluetoothPrinterConnected() {
+      if (!navigator.bluetooth) {
+        throw new Error('Browser tidak mendukung Web Bluetooth. Gunakan Chrome di Android/Desktop.');
       }
+
+      // 1. Jika sudah terhubung aktif, langsung pakai
+      if (bluetoothPrinterDevice && bluetoothPrinterDevice.gatt && bluetoothPrinterDevice.gatt.connected && bluetoothCharacteristic) {
+        return bluetoothCharacteristic;
+      }
+
+      // 2. Coba rekoneksi otomatis ke perangkat terakhir yang dipilih pada sesi ini
+      if (bluetoothPrinterDevice && bluetoothPrinterDevice.gatt) {
+        try {
+          const server = await bluetoothPrinterDevice.gatt.connect();
+          const char = await findWritableCharacteristic(server);
+          if (char) {
+            bluetoothCharacteristic = char;
+            updateBtPrinterBadge(true, bluetoothPrinterDevice.name);
+            return bluetoothCharacteristic;
+          }
+        } catch (reconnErr) {
+          console.warn('Auto-reconnect gagal, meminta pemilihan perangkat:', reconnErr);
+        }
+      }
+
+      // 3. Coba cek izin perangkat yang pernah disimpan di Chrome (getDevices)
+      if (typeof navigator.bluetooth.getDevices === 'function') {
+        try {
+          const permittedDevices = await navigator.bluetooth.getDevices();
+          if (permittedDevices && permittedDevices.length > 0) {
+            for (const dev of permittedDevices) {
+              try {
+                const server = await dev.gatt.connect();
+                const char = await findWritableCharacteristic(server);
+                if (char) {
+                  bluetoothPrinterDevice = dev;
+                  bluetoothCharacteristic = char;
+                  dev.addEventListener('gattserverdisconnected', () => {
+                    bluetoothCharacteristic = null;
+                    updateBtPrinterBadge(false);
+                  });
+                  updateBtPrinterBadge(true, dev.name);
+                  return bluetoothCharacteristic;
+                }
+              } catch (e) {}
+            }
+          }
+        } catch (e) {}
+      }
+
+      // 4. Minta pengguna memilih printer Bluetooth 58mm
+      showToast('Pilih Printer Bluetooth 58mm Anda...', 'info');
+      const device = await navigator.bluetooth.requestDevice({
+        acceptAllDevices: true,
+        optionalServices: BT_PRINTER_SERVICES
+      });
+
       device.addEventListener('gattserverdisconnected', () => {
         bluetoothCharacteristic = null;
-        refreshBtStatusUI();
+        updateBtPrinterBadge(false);
+        showToast('Koneksi Printer Bluetooth terputus.', 'info');
       });
 
       const server = await device.gatt.connect();
       const char = await findWritableCharacteristic(server);
+
       if (!char) {
-        throw new Error('Tidak ditemukan jalur cetak ESC/POS pada perangkat Bluetooth ini.');
+        throw new Error('Perangkat Bluetooth ini tidak memiliki layanan cetak ESC/POS.');
       }
 
       bluetoothPrinterDevice = device;
       bluetoothCharacteristic = char;
-      refreshBtStatusUI();
-      return char;
+      updateBtPrinterBadge(true, device.name);
+      showToast(`Terhubung ke Printer ${device.name || 'Bluetooth 58mm'}!`, 'success');
+      return bluetoothCharacteristic;
     }
 
-    // Rekoneksi latar belakang saat halaman dimuat (tidak mengganggu user gesture klik)
-    async function trySilentBluetoothReconnect() {
-      if (!navigator.bluetooth || typeof navigator.bluetooth.getDevices !== 'function') return;
+    async function connectBluetoothPrinterManual() {
       try {
-        const permittedDevices = await navigator.bluetooth.getDevices();
-        if (permittedDevices && permittedDevices.length > 0) {
-          for (const dev of permittedDevices) {
-            try {
-              await connectGattAndGetChar(dev);
-              return;
-            } catch (e) {}
-          }
-        }
-      } catch (e) {}
-    }
-
-    function disconnectBluetoothPrinter() {
-      try {
-        if (bluetoothPrinterDevice && bluetoothPrinterDevice.gatt && bluetoothPrinterDevice.gatt.connected) {
-          bluetoothPrinterDevice.gatt.disconnect();
-        }
-      } catch (e) {}
-      bluetoothPrinterDevice = null;
-      bluetoothCharacteristic = null;
-      hideBtDiagnosticAlert();
-      refreshBtStatusUI();
-      showToast('Koneksi printer direset. Silakan klik Scan & Pilih Printer.', 'info');
-    }
-
-    // PENTING: Panggil navigator.bluetooth.requestDevice() SECARA SINKRON di baris pertama klik!
-    function requestBluetoothPrinterSynchronously() {
-      if (!navigator.bluetooth || typeof navigator.bluetooth.requestDevice !== 'function') {
-        return Promise.reject(new Error('WEB_BLUETOOTH_UNSUPPORTED'));
-      }
-      // Jangan pernah menaruh await sebelum baris ini agar User Gesture Chrome tidak hilang!
-      return navigator.bluetooth.requestDevice({
-        acceptAllDevices: true,
-        optionalServices: BT_PRINTER_SERVICES
-      });
-    }
-
-    async function pairAndPrintBluetoothNow() {
-      hideBtDiagnosticAlert();
-      const clickStartTime = Date.now();
-
-      // Baris Pertama: Langsung panggil requestDevice secara sinkron dengan User Gesture!
-      let devicePromise;
-      try {
-        devicePromise = requestBluetoothPrinterSynchronously();
-      } catch (syncErr) {
-        devicePromise = Promise.reject(syncErr);
-      }
-
-      try {
-        const device = await devicePromise;
-        showToast(`Menghubungkan ke ${device.name || 'Printer 58mm'}...`, 'info');
-        const char = await connectGattAndGetChar(device);
-        showToast(`Terhubung ke Printer ${device.name || 'Bluetooth 58mm'}!`, 'success');
-
-        // Jika ada transaksi yang menunggu dicetak, langsung cetak otomatis!
-        if (pendingBtPrintTransaction) {
-          const trxToPrint = pendingBtPrintTransaction;
-          pendingBtPrintTransaction = null;
-          closeModal('btPrinterModal');
-          await sendEscPosToCharacteristic(char, trxToPrint);
-        }
+        await ensureBluetoothPrinterConnected();
       } catch (err) {
-        const elapsed = Date.now() - clickStartTime;
-        handleBluetoothPopupError(err, elapsed);
-      }
-    }
-
-    function handleBluetoothPopupError(err, elapsedMs) {
-      console.warn('Bluetooth requestDevice error:', err, 'Elapsed:', elapsedMs);
-      const errMsg = String((err && err.message) || err || '');
-      const errName = String((err && err.name) || '');
-
-      if (errMsg.includes('WEB_BLUETOOTH_UNSUPPORTED') || !navigator.bluetooth) {
-        openBtPrinterModal();
-        showBtDiagnosticAlert(
-          'WebView Tidak Mendukung Pop-up Bluetooth',
-          'Aplikasi saat ini dibuka di dalam WebView yang tidak memiliki fitur pop-up Bluetooth Chrome. <br><b>Solusi:</b> Buka link aplikasi di browser <b>Google Chrome</b> lalu pilih <b>Install Aplikasi</b>, atau ubah Metode Cetak di bawah ke <b>Nomor 2 (Sistem)</b> atau <b>Nomor 3 (Jalur SPP/Intent)</b>.'
-        );
-        return;
-      }
-
-      // Jika gagal sangat cepat (< 450ms), berarti pop-up sama sekali tidak ditampilkan oleh sistem Android/Chrome
-      if (elapsedMs < 450 || errName === 'SecurityError' || errMsg.toLowerCase().includes('gesture') || errMsg.toLowerCase().includes('adapter') || errMsg.toLowerCase().includes('location')) {
-        openBtPrinterModal();
-        showBtDiagnosticAlert(
-          'Pop-up Pemilihan Bluetooth Diblokir oleh HP / Browser',
-          'Sistem Android menolak memunculkan daftar printer Bluetooth.<br>' +
-          '<b>Pastikan 3 hal ini di HP Anda:</b><br>' +
-          '1. Nyalakan <b>Bluetooth</b> DAN <b>Lokasi (GPS)</b> di panel atas HP Android.<br>' +
-          '2. Berikan izin <b>Perangkat Terdekat (Nearby Devices)</b> & <b>Lokasi</b> untuk aplikasi Chrome.<br>' +
-          '3. Klik tombol biru <b>"Scan & Pilih Printer Bluetooth"</b> di bawah untuk memunculkan pop-up kembali.'
-        );
-        return;
-      }
-
-      // Jika lebih dari 450ms dan NotFoundError, pengguna menutup sendiri pop-up pemilihan
-      if (errName === 'NotFoundError') {
-        showToast('Pemilihan printer Bluetooth ditutup.', 'info');
-      } else {
-        openBtPrinterModal();
-        showBtDiagnosticAlert('Gagal Menghubungkan Printer', 'Pesan sistem: ' + errMsg);
+        if (err && err.name !== 'NotFoundError') {
+          showToast('Koneksi Bluetooth gagal: ' + err.message, 'error');
+        }
       }
     }
 
@@ -4138,8 +3900,7 @@ Matur Suksma!`;
       const cleanLeft = String(leftText || '');
       const cleanRight = String(rightText || '');
       const spaces = Math.max(1, maxLen - cleanLeft.length - cleanRight.length);
-      return cleanLeft + ' '.repeat(spaces) + cleanRight + '
-';
+      return cleanLeft + ' '.repeat(spaces) + cleanRight + '\n';
     }
 
     function buildEscPosReceiptBytes(trx) {
@@ -4158,39 +3919,29 @@ Matur Suksma!`;
       // Align Center (ESC a 1) & Bold ON (ESC E 1)
       pushBytes([0x1B, 0x61, 0x01]);
       pushBytes([0x1B, 0x45, 0x01]);
-      pushText('SINGARAJA SOCCERFIELD
-');
+      pushText('SINGARAJA SOCCERFIELD\n');
       pushBytes([0x1B, 0x45, 0x00]); // Bold OFF
-      pushText('Jl. Pulau Dewata 3, Pemaron
-');
-      pushText('WA: 085137770828
-');
-      pushText('--------------------------------
-');
+      pushText('Jl. Pulau Dewata 3, Pemaron\n');
+      pushText('WA: 085137770828\n');
+      pushText('--------------------------------\n');
 
       // Align Left (ESC a 0)
       pushBytes([0x1B, 0x61, 0x00]);
-      pushText(`Tgl  : ${dateStr}
-`);
-      pushText(`Kasir: ${cashierStr}
-`);
-      pushText(`No   : ${noStr}
-`);
-      pushText('--------------------------------
-');
+      pushText(`Tgl  : ${dateStr}\n`);
+      pushText(`Kasir: ${cashierStr}\n`);
+      pushText(`No   : ${noStr}\n`);
+      pushText('--------------------------------\n');
 
       // Daftar Barang
       (trx.items || []).forEach(item => {
         const itemName = String(item.name || 'Item').slice(0, 32);
         const qtyPrice = `${item.qty}x ${Number(item.price || 0).toLocaleString('id-ID')}`;
         const subTotal = formatRupiah((item.price || 0) * (item.qty || 1));
-        pushText(itemName + '
-');
+        pushText(itemName + '\n');
         pushText(formatEscPosLine('  ' + qtyPrice, subTotal, 32));
       });
 
-      pushText('--------------------------------
-');
+      pushText('--------------------------------\n');
 
       // Ringkasan Total (Bold ON untuk Total)
       pushBytes([0x1B, 0x45, 0x01]);
@@ -4203,19 +3954,17 @@ Matur Suksma!`;
         pushText(formatEscPosLine('Kembalian:', formatRupiah(trx.change || 0), 32));
       }
 
-      pushText('--------------------------------
-');
+      pushText('--------------------------------\n');
 
-      // Footer Center & Feed 3 baris
+      // Footer Center
       pushBytes([0x1B, 0x61, 0x01]);
-      pushText('Matur Suksma sampun mampir!
-');
-      pushText('Salam Olahraga & Fairplay
+      pushText('Matur Suksma sampun mampir!\n');
+      pushText('Salam Olahraga & Fairplay\n\n\n');
 
-
-');
+      // Feed 3 baris (ESC d 3)
       pushBytes([0x1B, 0x64, 0x03]);
 
+      // Gabungkan seluruh Uint8Array menjadi 1 buffer utuh
       const totalLength = chunks.reduce((acc, c) => acc + c.length, 0);
       const combined = new Uint8Array(totalLength);
       let offset = 0;
@@ -4226,14 +3975,25 @@ Matur Suksma!`;
       return combined;
     }
 
-    async function sendEscPosToCharacteristic(char, trx) {
-      if (isBtPrinting) {
-        showToast('Sedang mengirim cetakan ke printer...', 'info');
+    async function printViaBluetoothDirect(trx) {
+      if (!trx) return;
+      if (!navigator.bluetooth) {
+        showToast('Web Bluetooth tidak tersedia di browser ini, mengalihkan ke cetak standar...', 'info');
+        printReceiptBrowserFallback(trx);
         return;
       }
+
+      if (isBtPrinting) {
+        showToast('Sedang memproses cetakan ke printer...', 'info');
+        return;
+      }
+
       try {
         isBtPrinting = true;
+        const char = await ensureBluetoothPrinterConnected();
         const dataBytes = buildEscPosReceiptBytes(trx);
+
+        // Kirim data secara bertahap (chunk 20 byte) agar buffer printer Bluetooth 58mm tidak penuh
         const CHUNK_SIZE = 20;
         for (let i = 0; i < dataBytes.length; i += CHUNK_SIZE) {
           const slice = dataBytes.slice(i, i + CHUNK_SIZE);
@@ -4244,99 +4004,21 @@ Matur Suksma!`;
           }
           await new Promise(res => setTimeout(res, 15));
         }
-        showToast('Nota berhasil dicetak ke Printer Bluetooth 58mm!', 'success');
+
+        showToast('Nota berhasil dicetak langsung ke Printer Bluetooth 58mm!', 'success');
         closeModal('paymentSuccessModal');
       } catch (err) {
-        console.error('Write ESC/POS error:', err);
+        console.error('Bluetooth print error:', err);
         bluetoothCharacteristic = null;
-        refreshBtStatusUI();
-        pendingBtPrintTransaction = trx;
-        openBtPrinterModal(trx);
-        showBtDiagnosticAlert(
-          'Koneksi ke Printer Terputus Saat Mencetak',
-          'Silakan klik tombol <b>"Pilih Printer Bluetooth & Langsung Cetak Nota"</b> di bawah untuk menyambungkan ulang dan mencetak.'
-        );
+        updateBtPrinterBadge(false);
+        if (err && err.name === 'NotFoundError') {
+          showToast('Pencarian printer Bluetooth dibatalkan.', 'info');
+        } else {
+          showToast('Gagal cetak Bluetooth: ' + (err.message || err), 'error');
+        }
       } finally {
         isBtPrinting = false;
       }
-    }
-
-    function printViaRawBtIntent(trx) {
-      if (!trx) return;
-      try {
-        const bytes = buildEscPosReceiptBytes(trx);
-        let binary = '';
-        for (let i = 0; i < bytes.byteLength; i++) {
-          binary += String.fromCharCode(bytes[i]);
-        }
-        const base64Data = window.btoa(binary);
-        window.location.href = 'rawbt:base64,' + base64Data;
-        closeModal('paymentSuccessModal');
-      } catch (e) {
-        showToast('Gagal mengirim intent cetak: ' + e.message, 'error');
-      }
-    }
-
-    function printViaBluetoothDirect(trx) {
-      if (!trx) return;
-      pendingBtPrintTransaction = trx;
-
-      // Mode 2: Cetak Sistem Android / USB (window.print)
-      if (btPrintMode === 'SYSTEM_PRINT') {
-        printReceiptBrowserFallback(trx);
-        return;
-      }
-
-      // Mode 3: Jalur Bluetooth Classic SPP / Intent
-      if (btPrintMode === 'RAWBT_INTENT') {
-        printViaRawBtIntent(trx);
-        return;
-      }
-
-      // Mode 1 (Default): Web Bluetooth Langsung (BLE_DIRECT)
-      // A. Jika printer sudah terhubung aktif, langsung kirim byte ESC/POS tanpa pop-up lagi
-      if (isBtPrinterConnected()) {
-        sendEscPosToCharacteristic(bluetoothCharacteristic, trx);
-        return;
-      }
-
-      // B. Jika belum terhubung: PANGGIL requestDevice() SECARA SINKRON DI BARIS PERTAMA!
-      const clickStartTime = Date.now();
-      let devicePromise;
-      try {
-        devicePromise = requestBluetoothPrinterSynchronously();
-      } catch (syncErr) {
-        devicePromise = Promise.reject(syncErr);
-      }
-
-      devicePromise
-        .then(async (device) => {
-          showToast(`Menghubungkan ke ${device.name || 'Printer 58mm'}...`, 'info');
-          const char = await connectGattAndGetChar(device);
-          pendingBtPrintTransaction = null;
-          await sendEscPosToCharacteristic(char, trx);
-        })
-        .catch((err) => {
-          const elapsed = Date.now() - clickStartTime;
-          handleBluetoothPopupError(err, elapsed);
-        });
-    }
-
-    function testBluetoothPrint58mm() {
-      const dummyTrx = {
-        id: 'TEST-BT',
-        receiptNo: 'TEST-58MM',
-        date: new Date().toISOString(),
-        cashier: currentUser ? currentUser.name : 'Admin / Kasir',
-        items: [
-          { name: 'Tes Koneksi Printer 58mm', price: 10000, qty: 1 }
-        ],
-        total: 10000,
-        method: 'CASH',
-        cashReceived: 10000,
-        change: 0
-      };
-      printViaBluetoothDirect(dummyTrx);
     }
 
     function printReceiptBrowserFallback(customTrx = null) {
@@ -6650,8 +6332,6 @@ Salam Olahraga & Fairplay!`;
     document.addEventListener('DOMContentLoaded', () => {
       startLiveClock();
       updateBonBadge();
-      refreshBtStatusUI();
-      trySilentBluetoothReconnect();
 
       // Inisialisasi daftar suara SpeechSynthesis
       if ('speechSynthesis' in window) {
