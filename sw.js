@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ssf-pos-pwa-v10';
+const CACHE_NAME = 'ssf-pos-pwa-v11';
 const CORE_ASSETS = [
   './',
   './index.html',
@@ -45,6 +45,28 @@ self.addEventListener('fetch', (event) => {
     url.hostname.includes('script.google.com') ||
     url.hostname.includes('script.googleusercontent.com')
   ) {
+    return;
+  }
+
+  // Gunakan Network-First untuk halaman HTML agar perbaikan kode langsung ter-update
+  if (event.request.mode === 'navigate' || url.pathname.endsWith('.html') || url.pathname.endsWith('/')) {
+    event.respondWith(
+      fetch(event.request)
+        .then((networkResponse) => {
+          if (networkResponse && networkResponse.status === 200) {
+            const responseClone = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put(event.request, responseClone);
+            });
+          }
+          return networkResponse;
+        })
+        .catch(() => {
+          return caches.match(event.request).then((cachedResponse) => {
+            return cachedResponse || caches.match('./index.html');
+          });
+        })
+    );
     return;
   }
 
